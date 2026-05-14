@@ -13,7 +13,7 @@ Suivi de performance des webinaires (live atelier macarons + autres) : show-up, 
 
 ## Setup local
 
-Ouvrir `index.html` dans Chrome. Password : `geoffrey497`.
+Ouvrir `index.html` dans Chrome. Password : `6688`.
 
 ## Setup base de données (1 seule fois)
 
