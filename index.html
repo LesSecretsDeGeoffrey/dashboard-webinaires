@@ -1,0 +1,3115 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LSG · Dashboard Webinaires</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/html2pdf.js@0.10.1/dist/html2pdf.bundle.min.js"></script>
+<style>
+:root {
+  --or: #C8A04A;
+  --or-clair: #E0BE6B;
+  --or-deep: #8a6f2b;
+  --sombre: #1A1410;
+  --sombre-2: #2A1F18;
+  --sombre-3: #3A2D22;
+  --creme: #FDF8F0;
+  --gris-mute: #807060;
+  --gris-mute-2: #5a4d3e;
+  --rouge: #B33A2A;
+  --vert: #5C8C5A;
+  --or-trans: rgba(200, 160, 74, 0.15);
+  --or-trans-2: rgba(200, 160, 74, 0.08);
+  --creme-trans: rgba(253, 248, 240, 0.05);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+html, body {
+  background: var(--sombre);
+  color: var(--creme);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-weight: 400;
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+body {
+  background:
+    radial-gradient(ellipse at top left, rgba(200, 160, 74, 0.08), transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(138, 111, 43, 0.06), transparent 50%),
+    var(--sombre);
+}
+
+/* ====== LAYOUT ====== */
+.app {
+  display: flex;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 240px;
+  background: linear-gradient(180deg, var(--sombre-2) 0%, var(--sombre) 100%);
+  border-right: 1px solid var(--or-trans);
+  padding: 30px 16px;
+  position: fixed;
+  left: 0;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar-footer {
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--or-trans-2);
+}
+
+.btn-reset {
+  width: 100%;
+  background: transparent;
+  color: rgba(253, 248, 240, 0.5);
+  border: 1px solid rgba(253, 248, 240, 0.12);
+  padding: 9px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.btn-reset:hover {
+  background: rgba(220, 80, 80, 0.08);
+  color: #E08A8A;
+  border-color: rgba(220, 80, 80, 0.3);
+}
+
+.btn-reset span { font-size: 14px; }
+
+.logo {
+  padding: 0 12px 30px;
+  border-bottom: 1px solid var(--or-trans-2);
+  margin-bottom: 24px;
+}
+
+.logo-mark {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.logo-monogram {
+  width: 38px;
+  height: 38px;
+  background: linear-gradient(135deg, var(--or) 0%, var(--or-deep) 100%);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  color: var(--sombre);
+  font-size: 18px;
+  box-shadow: 0 4px 12px rgba(200, 160, 74, 0.3);
+}
+
+.logo-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.logo-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--creme);
+  line-height: 1;
+}
+
+.logo-sub {
+  font-family: 'Courier New', monospace;
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--or);
+  margin-top: 4px;
+}
+
+.nav { list-style: none; }
+
+.nav li {
+  margin-bottom: 4px;
+}
+
+.nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  color: var(--gris-mute);
+  text-decoration: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border-left: 2px solid transparent;
+  cursor: pointer;
+}
+
+.nav a:hover {
+  background: var(--creme-trans);
+  color: var(--creme);
+}
+
+.nav a.active {
+  background: var(--or-trans);
+  color: var(--or-clair);
+  border-left-color: var(--or);
+}
+
+.nav-icon {
+  font-size: 16px;
+  width: 20px;
+  text-align: center;
+}
+
+.main {
+  margin-left: 240px;
+  padding: 40px;
+  width: calc(100% - 240px);
+  min-height: 100vh;
+}
+
+.page { display: none; animation: fadeIn 0.4s ease; }
+.page.active { display: block; }
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.97); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.page-header {
+  margin-bottom: 32px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+h1.page-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 42px;
+  font-weight: 600;
+  color: var(--creme);
+  line-height: 1.1;
+}
+
+.page-subtitle {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  color: var(--gris-mute);
+  font-size: 17px;
+  margin-top: 6px;
+}
+
+.overline {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
+  color: var(--or);
+  font-weight: 700;
+}
+
+/* ====== KPI CARDS ====== */
+.kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.kpi-card {
+  background: linear-gradient(135deg, var(--sombre-2) 0%, var(--sombre-3) 100%);
+  border: 1px solid var(--or-trans);
+  border-radius: 14px;
+  padding: 24px;
+  position: relative;
+  overflow: hidden;
+  animation: scaleIn 0.5s ease backwards;
+  transition: all 0.3s ease;
+  backdrop-filter: blur(10px);
+}
+
+.kpi-card:nth-child(1) { animation-delay: 0.05s; }
+.kpi-card:nth-child(2) { animation-delay: 0.1s; }
+.kpi-card:nth-child(3) { animation-delay: 0.15s; }
+.kpi-card:nth-child(4) { animation-delay: 0.2s; }
+
+.kpi-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--or);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--or-trans);
+}
+
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--or), transparent);
+  opacity: 0.6;
+}
+
+.kpi-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.kpi-icon {
+  font-size: 18px;
+}
+
+.kpi-label-text {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--gris-mute);
+}
+
+.kpi-value {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 52px;
+  font-weight: 600;
+  color: var(--or);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.kpi-value.small { font-size: 38px; }
+
+.kpi-unit {
+  font-size: 22px;
+  color: var(--or-clair);
+  margin-left: 4px;
+}
+
+.kpi-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-family: 'Inter', sans-serif;
+}
+
+.trend-up {
+  background: rgba(92, 140, 90, 0.15);
+  color: var(--vert);
+}
+
+.trend-down {
+  background: rgba(179, 58, 42, 0.15);
+  color: var(--rouge);
+}
+
+.trend-neutral {
+  background: rgba(128, 112, 96, 0.15);
+  color: var(--gris-mute);
+}
+
+/* ====== CHARTS ====== */
+.charts-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 32px;
+}
+
+.chart-card {
+  background: var(--sombre-2);
+  border: 1px solid var(--or-trans);
+  border-radius: 14px;
+  padding: 24px;
+  animation: scaleIn 0.5s ease backwards;
+  animation-delay: 0.25s;
+}
+
+.chart-card.full { grid-column: 1 / -1; }
+
+.chart-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 18px;
+}
+
+.chart-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--creme);
+}
+
+.chart-wrap {
+  position: relative;
+  height: 260px;
+}
+
+.chart-wrap.tall { height: 320px; }
+
+/* ====== TABLES ====== */
+.table-card {
+  background: var(--sombre-2);
+  border: 1px solid var(--or-trans);
+  border-radius: 14px;
+  overflow: hidden;
+  animation: scaleIn 0.5s ease;
+}
+
+.table-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid var(--or-trans-2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.table-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 22px;
+  font-weight: 600;
+  color: var(--creme);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th {
+  text-align: left;
+  padding: 14px 24px;
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--or);
+  border-bottom: 1px solid var(--or-trans);
+  background: rgba(200, 160, 74, 0.03);
+  cursor: pointer;
+  user-select: none;
+}
+
+th:hover { color: var(--or-clair); }
+
+td {
+  padding: 14px 24px;
+  font-size: 14px;
+  color: var(--creme);
+  border-bottom: 1px solid var(--creme-trans);
+}
+
+tr:hover td {
+  background: rgba(200, 160, 74, 0.04);
+}
+
+tr.clickable { cursor: pointer; }
+
+.td-bold { font-weight: 600; color: var(--or-clair); }
+.td-mono { font-family: 'Courier New', monospace; }
+.td-gold { color: var(--or); font-weight: 600; }
+.td-muted { color: var(--gris-mute); }
+
+/* ====== BUTTONS ====== */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 20px;
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  border: none;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  letter-spacing: 0.3px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, var(--or) 0%, var(--or-deep) 100%);
+  color: var(--sombre);
+  box-shadow: 0 4px 12px rgba(200, 160, 74, 0.2);
+}
+
+.btn-primary:hover {
+  background: linear-gradient(135deg, var(--or-clair) 0%, var(--or) 100%);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(200, 160, 74, 0.3);
+}
+
+.btn-secondary {
+  background: transparent;
+  border: 1px solid var(--or);
+  color: var(--or);
+}
+
+.btn-secondary:hover {
+  background: var(--or-trans);
+  color: var(--or-clair);
+  border-color: var(--or-clair);
+}
+
+.btn-danger {
+  background: transparent;
+  border: 1px solid var(--rouge);
+  color: var(--rouge);
+}
+
+.btn-danger:hover {
+  background: rgba(179, 58, 42, 0.1);
+}
+
+.btn-sm { padding: 7px 12px; font-size: 12px; }
+
+/* ====== MODAL ====== */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(6px);
+  z-index: 1000;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
+  overflow-y: auto;
+}
+
+.modal-overlay.active { display: flex; }
+
+.modal {
+  background: var(--sombre-2);
+  border: 1px solid var(--or-trans);
+  border-radius: 16px;
+  width: 100%;
+  max-width: 760px;
+  animation: scaleIn 0.3s ease;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
+}
+
+.modal-header {
+  padding: 24px 30px;
+  border-bottom: 1px solid var(--or-trans-2);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--creme);
+}
+
+.modal-close {
+  background: transparent;
+  border: none;
+  color: var(--gris-mute);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 4px 10px;
+  line-height: 1;
+  border-radius: 6px;
+}
+
+.modal-close:hover { background: var(--creme-trans); color: var(--creme); }
+
+.modal-body {
+  padding: 24px 30px;
+  max-height: 70vh;
+  overflow-y: auto;
+}
+
+.modal-footer {
+  padding: 20px 30px;
+  border-top: 1px solid var(--or-trans-2);
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.modal-footer-right {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+/* ====== FORM ====== */
+.form-section {
+  margin-bottom: 24px;
+}
+
+.form-section-title {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--or);
+  margin-bottom: 14px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--or-trans-2);
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 14px;
+}
+
+.form-grid-3 { grid-template-columns: repeat(3, 1fr); }
+.form-grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+.form-field {
+  display: flex;
+  flex-direction: column;
+}
+
+.form-field.full { grid-column: 1 / -1; }
+
+.form-label {
+  font-family: 'Courier New', monospace;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--gris-mute);
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+
+.form-input,
+.form-select,
+.form-textarea {
+  background: var(--sombre);
+  border: 1px solid var(--or-trans-2);
+  color: var(--creme);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-family: 'Inter', sans-serif;
+  font-size: 14px;
+  transition: all 0.2s ease;
+}
+
+.form-input:focus,
+.form-select:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: var(--or);
+  background: var(--sombre-2);
+  box-shadow: 0 0 0 3px var(--or-trans);
+}
+
+.form-textarea {
+  resize: vertical;
+  min-height: 80px;
+}
+
+/* ====== OBJECTIONS / DM ====== */
+.objection-list,
+.dm-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.list-row {
+  background: var(--sombre);
+  border: 1px solid var(--or-trans-2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.list-row input,
+.list-row select {
+  background: var(--sombre-2);
+  border: 1px solid var(--or-trans-2);
+  color: var(--creme);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+}
+
+.list-row input[type="number"] { width: 80px; }
+.list-row select { width: 130px; }
+
+.btn-tiny {
+  background: transparent;
+  border: 1px solid var(--rouge);
+  color: var(--rouge);
+  padding: 5px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.btn-tiny:hover { background: rgba(179, 58, 42, 0.1); }
+
+.btn-add {
+  background: transparent;
+  border: 1px dashed var(--or);
+  color: var(--or);
+  padding: 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  margin-top: 10px;
+  width: 100%;
+  text-align: center;
+  transition: all 0.2s ease;
+}
+
+.btn-add:hover {
+  background: var(--or-trans);
+  border-style: solid;
+}
+
+/* ====== STATUS BADGES ====== */
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: 'Courier New', monospace;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
+
+.status-a_envoyer { background: rgba(128, 112, 96, 0.2); color: var(--gris-mute); }
+.status-envoye { background: rgba(95, 145, 200, 0.2); color: #7BB0E8; }
+.status-a_repondu { background: rgba(200, 160, 74, 0.2); color: var(--or-clair); }
+.status-a_achete { background: rgba(92, 140, 90, 0.2); color: var(--vert); }
+.status-perdu { background: rgba(179, 58, 42, 0.2); color: var(--rouge); }
+
+/* ====== FILTERS ====== */
+.filters {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.filter-chip {
+  background: var(--sombre-2);
+  border: 1px solid var(--or-trans-2);
+  color: var(--gris-mute);
+  padding: 6px 14px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.2s ease;
+}
+
+.filter-chip:hover { color: var(--creme); border-color: var(--or-trans); }
+
+.filter-chip.active {
+  background: var(--or-trans);
+  border-color: var(--or);
+  color: var(--or-clair);
+}
+
+/* ====== COMPARAISONS ====== */
+.compare-selector {
+  background: var(--sombre-2);
+  border: 1px solid var(--or-trans);
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+.compare-options {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.compare-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  background: var(--sombre);
+  border: 1px solid var(--or-trans-2);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.compare-checkbox:hover { border-color: var(--or-trans); }
+
+.compare-checkbox input { accent-color: var(--or); }
+
+.compare-checkbox.checked {
+  background: var(--or-trans);
+  border-color: var(--or);
+}
+
+.compare-label {
+  font-size: 13px;
+  color: var(--creme);
+}
+
+.compare-label-sub {
+  font-size: 11px;
+  color: var(--gris-mute);
+  font-family: 'Courier New', monospace;
+}
+
+.compare-table-wrap {
+  overflow-x: auto;
+}
+
+.compare-table {
+  min-width: 600px;
+}
+
+.compare-table th:first-child,
+.compare-table td:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--sombre-2);
+  z-index: 2;
+}
+
+.cell-best { background: rgba(200, 160, 74, 0.12) !important; color: var(--or-clair) !important; font-weight: 700; }
+.cell-worst { background: rgba(179, 58, 42, 0.1) !important; color: var(--rouge) !important; }
+
+/* ====== ROI ====== */
+.roi-card {
+  background: var(--sombre-2);
+  border: 1px solid var(--or-trans);
+  border-radius: 14px;
+  padding: 24px;
+  margin-bottom: 24px;
+}
+
+/* ====== INSIGHT ====== */
+.insight {
+  background: linear-gradient(135deg, var(--or-trans) 0%, var(--or-trans-2) 100%);
+  border-left: 3px solid var(--or);
+  padding: 16px 20px;
+  border-radius: 8px;
+  margin: 16px 0;
+  font-style: italic;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 17px;
+  color: var(--creme);
+}
+
+.insight-icon {
+  margin-right: 8px;
+  font-style: normal;
+}
+
+/* ====== EMPTY STATE ====== */
+.empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--gris-mute);
+}
+
+.empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.5; }
+.empty-title { font-family: 'Cormorant Garamond', serif; font-size: 22px; color: var(--creme); margin-bottom: 8px; }
+.empty-sub { font-size: 14px; }
+
+/* ====== RAPPORT ====== */
+.report-area {
+  background: white;
+  color: #1A1410;
+  padding: 40px;
+  border-radius: 14px;
+  margin-top: 20px;
+}
+
+.report-area * { color: #1A1410 !important; }
+.report-area .report-gold { color: #8a6f2b !important; }
+
+/* ====== UTILS ====== */
+.hidden { display: none !important; }
+.text-center { text-align: center; }
+.mt-2 { margin-top: 14px; }
+.mb-2 { margin-bottom: 14px; }
+.flex-row { display: flex; gap: 10px; align-items: center; }
+
+/* ====== RESPONSIVE ====== */
+@media (max-width: 1100px) {
+  .kpi-grid { grid-template-columns: repeat(2, 1fr); }
+  .charts-grid { grid-template-columns: 1fr; }
+  .form-grid, .form-grid-3, .form-grid-4 { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 780px) {
+  .sidebar { width: 70px; padding: 20px 8px; }
+  .sidebar .logo-text, .sidebar .nav a span:not(.nav-icon) { display: none; }
+  .main { margin-left: 70px; width: calc(100% - 70px); padding: 24px 16px; }
+  .kpi-grid { grid-template-columns: 1fr; }
+  h1.page-title { font-size: 32px; }
+}
+
+/* ====== TOAST ====== */
+.toast {
+  position: fixed;
+  bottom: 30px;
+  right: 30px;
+  background: var(--sombre-2);
+  border: 1px solid var(--or);
+  color: var(--creme);
+  padding: 14px 20px;
+  border-radius: 10px;
+  font-size: 14px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  z-index: 2000;
+  animation: slideUp 0.3s ease;
+}
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+/* ====== Scrollbar ====== */
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: var(--sombre); }
+::-webkit-scrollbar-thumb { background: var(--or-trans); border-radius: 5px; }
+::-webkit-scrollbar-thumb:hover { background: var(--or); }
+
+/* ====== AUTH OVERLAY ====== */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--sombre);
+  background:
+    radial-gradient(ellipse at top left, rgba(200, 160, 74, 0.10), transparent 50%),
+    radial-gradient(ellipse at bottom right, rgba(138, 111, 43, 0.08), transparent 50%),
+    var(--sombre);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  padding: 24px;
+}
+.auth-overlay.hidden { display: none; }
+.auth-box {
+  width: 100%;
+  max-width: 380px;
+  background: var(--sombre-2);
+  border: 1px solid var(--or-trans);
+  border-radius: 14px;
+  padding: 36px 28px;
+  box-shadow: 0 30px 60px rgba(0, 0, 0, 0.55);
+}
+.auth-logo {
+  text-align: center;
+  margin-bottom: 24px;
+}
+.auth-monogram {
+  display: inline-block;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 36px;
+  color: var(--or);
+  letter-spacing: 4px;
+  font-weight: 600;
+  border: 1px solid var(--or-trans);
+  padding: 10px 22px;
+  border-radius: 10px;
+}
+.auth-title {
+  font-family: 'Cormorant Garamond', serif;
+  color: var(--creme);
+  font-size: 24px;
+  text-align: center;
+  margin-bottom: 6px;
+}
+.auth-sub {
+  text-align: center;
+  color: var(--gris-mute);
+  font-size: 13px;
+  margin-bottom: 24px;
+}
+.auth-label {
+  display: block;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  color: var(--gris-mute);
+  margin-bottom: 8px;
+  font-family: 'Courier New', monospace;
+}
+.auth-input {
+  width: 100%;
+  background: var(--sombre);
+  border: 1px solid var(--or-trans);
+  color: var(--creme);
+  padding: 12px 14px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  margin-bottom: 18px;
+  outline: none;
+  transition: border-color 0.2s ease;
+}
+.auth-input:focus { border-color: var(--or); }
+.auth-btn {
+  width: 100%;
+  background: var(--or);
+  color: var(--sombre);
+  border: none;
+  padding: 12px 16px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: background 0.2s ease;
+}
+.auth-btn:hover { background: var(--or-clair); }
+.auth-error {
+  color: #E08A8A;
+  font-size: 12px;
+  margin-top: 12px;
+  text-align: center;
+  min-height: 18px;
+}
+.auth-box.shake { animation: authShake 0.4s ease; }
+@keyframes authShake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-8px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(6px); }
+}
+
+/* ====== APP LOADER ====== */
+.app-loader {
+  position: fixed;
+  inset: 0;
+  background: var(--sombre);
+  z-index: 9000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 16px;
+  font-family: 'Courier New', monospace;
+  color: var(--or);
+  letter-spacing: 3px;
+  text-transform: uppercase;
+  font-size: 12px;
+}
+.app-loader.hidden { display: none; }
+.app-loader-spinner {
+  width: 36px;
+  height: 36px;
+  border: 2px solid var(--or-trans);
+  border-top-color: var(--or);
+  border-radius: 50%;
+  animation: loaderSpin 0.9s linear infinite;
+}
+@keyframes loaderSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Erreur toast (variante rouge) */
+.toast.toast-error {
+  border-color: #B33A2A;
+  background: #2A1818;
+  color: #E08A8A;
+}
+</style>
+</head>
+<body>
+
+<!-- ============ AUTH OVERLAY ============ -->
+<div class="auth-overlay" id="authOverlay">
+  <div class="auth-box" id="authBox">
+    <div class="auth-logo">
+      <div class="auth-monogram">LSG</div>
+    </div>
+    <div class="auth-title">Dashboard Webinaires</div>
+    <div class="auth-sub">Accès protégé</div>
+    <label class="auth-label" for="authPassword">Mot de passe</label>
+    <input type="password" id="authPassword" class="auth-input" autocomplete="current-password" placeholder="••••••••••">
+    <button class="auth-btn" id="authBtn">Entrer</button>
+    <div class="auth-error" id="authError"></div>
+  </div>
+</div>
+
+<!-- ============ APP LOADER ============ -->
+<div class="app-loader hidden" id="appLoader">
+  <div class="app-loader-spinner"></div>
+  <div>Chargement</div>
+</div>
+
+<div class="app">
+
+  <!-- ============ SIDEBAR ============ -->
+  <aside class="sidebar">
+    <div class="logo">
+      <div class="logo-mark">
+        <div class="logo-monogram">LSG</div>
+        <div class="logo-text">
+          <div class="logo-title">Dashboard</div>
+          <div class="logo-sub">Webinaires</div>
+        </div>
+      </div>
+    </div>
+    <ul class="nav">
+      <li><a data-page="dashboard" class="active"><span class="nav-icon">📊</span><span>Dashboard</span></a></li>
+      <li><a data-page="webinaires"><span class="nav-icon">🎯</span><span>Webinaires</span></a></li>
+      <li><a data-page="comparaisons"><span class="nav-icon">🔄</span><span>Comparaisons</span></a></li>
+      <li><a data-page="dm"><span class="nav-icon">💬</span><span>DM Tracking</span></a></li>
+      <li><a data-page="objections"><span class="nav-icon">❓</span><span>Objections</span></a></li>
+      <li><a data-page="rapports"><span class="nav-icon">📄</span><span>Rapports</span></a></li>
+    </ul>
+    <div class="sidebar-footer">
+      <button class="btn-reset" id="btnReset" title="Vider tout le dashboard">
+        <span>↺</span> Reset complet
+      </button>
+    </div>
+  </aside>
+
+  <!-- ============ MAIN ============ -->
+  <main class="main">
+
+    <!-- ===== DASHBOARD ===== -->
+    <section class="page active" id="page-dashboard">
+      <div class="page-header">
+        <div>
+          <div class="overline">Vue d'ensemble</div>
+          <h1 class="page-title">Dashboard</h1>
+          <div class="page-subtitle">Performance globale de tes webinaires</div>
+        </div>
+      </div>
+
+      <div class="kpi-grid" id="kpiGrid"></div>
+
+      <div class="charts-grid">
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3 class="chart-title">Évolution conversion</h3>
+            <span class="overline">% ventes / présents</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartConversion"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3 class="chart-title">CA par webinaire</h3>
+            <span class="overline">Euros</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartCA"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3 class="chart-title">Sources des inscrits</h3>
+            <span class="overline">Acquisition</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartSources"></canvas></div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-header">
+            <h3 class="chart-title">Évolution show-up</h3>
+            <span class="overline">% présents / inscrits</span>
+          </div>
+          <div class="chart-wrap"><canvas id="chartShowup"></canvas></div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <h3 class="table-title">Dernier webinaire</h3>
+          <span class="overline" id="lastWebinaireOverline">aucune donnée</span>
+        </div>
+        <div id="lastWebinaireContent"></div>
+      </div>
+    </section>
+
+    <!-- ===== WEBINAIRES ===== -->
+    <section class="page" id="page-webinaires">
+      <div class="page-header">
+        <div>
+          <div class="overline">Tous les évènements</div>
+          <h1 class="page-title">Webinaires</h1>
+          <div class="page-subtitle">Saisis, importe et analyse chaque session</div>
+        </div>
+        <div class="flex-row">
+          <label for="csvImport" class="btn btn-secondary" style="cursor: pointer;">📥 Import CSV WebinarJam</label>
+          <input type="file" id="csvImport" accept=".csv" style="display:none">
+          <button class="btn btn-primary" onclick="openWebinaireForm()">+ Nouveau webinaire</button>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th data-sort="date">Date</th>
+              <th data-sort="titre">Titre</th>
+              <th data-sort="pitch_version">Pitch</th>
+              <th data-sort="inscrits_total">Inscrits</th>
+              <th data-sort="presents_pitch">Présents</th>
+              <th data-sort="showup">Show-up %</th>
+              <th data-sort="ventes_count">Ventes</th>
+              <th data-sort="conversion">Conv %</th>
+              <th data-sort="ventes_montant_total">CA</th>
+            </tr>
+          </thead>
+          <tbody id="webinairesTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== COMPARAISONS ===== -->
+    <section class="page" id="page-comparaisons">
+      <div class="page-header">
+        <div>
+          <div class="overline">Side-by-side</div>
+          <h1 class="page-title">Comparaisons</h1>
+          <div class="page-subtitle">Compare jusqu'à 5 webinaires entre eux</div>
+        </div>
+      </div>
+
+      <div class="compare-selector">
+        <div class="overline">Sélectionne 2 à 5 webinaires</div>
+        <div class="compare-options" id="compareOptions"></div>
+      </div>
+
+      <div id="compareResults"></div>
+    </section>
+
+    <!-- ===== DM TRACKING ===== -->
+    <section class="page" id="page-dm">
+      <div class="page-header">
+        <div>
+          <div class="overline">Relances post-live</div>
+          <h1 class="page-title">DM Tracking</h1>
+          <div class="page-subtitle">Suis chaque prospect, du DM au closing</div>
+        </div>
+        <button class="btn btn-primary" onclick="openAddProspect()">+ Ajouter prospect</button>
+      </div>
+
+      <div class="kpi-grid" id="dmStats" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 24px;"></div>
+
+      <div class="filters" id="dmFilters">
+        <span class="overline" style="margin-right:8px;">Filtres</span>
+        <button class="filter-chip active" data-filter="tous">Tous</button>
+        <button class="filter-chip" data-filter="a_envoyer">À envoyer</button>
+        <button class="filter-chip" data-filter="envoye">Envoyé</button>
+        <button class="filter-chip" data-filter="a_repondu">A répondu</button>
+        <button class="filter-chip" data-filter="a_achete">A acheté</button>
+        <button class="filter-chip" data-filter="perdu">Perdu</button>
+      </div>
+
+      <div class="table-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Prénom</th>
+              <th>Webinaire</th>
+              <th>Status</th>
+              <th>Relance prévue</th>
+              <th>Notes</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="dmTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== OBJECTIONS ===== -->
+    <section class="page" id="page-objections">
+      <div class="page-header">
+        <div>
+          <div class="overline">Frictions au pitch</div>
+          <h1 class="page-title">Objections</h1>
+          <div class="page-subtitle">Vue agrégée pour préparer le prochain pitch</div>
+        </div>
+      </div>
+
+      <div class="chart-card mb-2">
+        <div class="chart-header">
+          <h3 class="chart-title">Top 10 objections</h3>
+          <span class="overline">Toutes sessions confondues</span>
+        </div>
+        <div class="chart-wrap tall"><canvas id="chartObjections"></canvas></div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <h3 class="table-title">Détail par objection</h3>
+        </div>
+        <table>
+          <thead>
+            <tr>
+              <th>Objection</th>
+              <th>Fréquence</th>
+              <th>Webinaires</th>
+            </tr>
+          </thead>
+          <tbody id="objectionsTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== RAPPORTS ===== -->
+    <section class="page" id="page-rapports">
+      <div class="page-header">
+        <div>
+          <div class="overline">ROI Ads + Export</div>
+          <h1 class="page-title">Rapports</h1>
+          <div class="page-subtitle">ROI publicitaire et exports PDF</div>
+        </div>
+      </div>
+
+      <h3 class="chart-title mb-2">ROI Ads</h3>
+      <div class="roi-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Webinaire</th>
+              <th>Dépense ads</th>
+              <th>CA généré</th>
+              <th>ROI %</th>
+              <th>CPA</th>
+              <th>Ventes</th>
+            </tr>
+          </thead>
+          <tbody id="roiTable"></tbody>
+        </table>
+      </div>
+
+      <div class="chart-card mb-2">
+        <div class="chart-header">
+          <h3 class="chart-title">Trend ROI ads</h3>
+          <span class="overline">%</span>
+        </div>
+        <div class="chart-wrap"><canvas id="chartROI"></canvas></div>
+      </div>
+
+      <h3 class="chart-title mb-2 mt-2">Export PDF</h3>
+      <div class="roi-card">
+        <div class="form-grid">
+          <div class="form-field">
+            <label class="form-label">Période</label>
+            <select class="form-select" id="reportPeriod">
+              <option value="all">Tout l'historique</option>
+              <option value="week">7 derniers jours</option>
+              <option value="month">30 derniers jours</option>
+              <option value="quarter">Trimestre</option>
+            </select>
+          </div>
+          <div class="form-field" style="justify-content:flex-end;">
+            <button class="btn btn-primary" onclick="generateReport()">📄 Générer le rapport PDF</button>
+          </div>
+        </div>
+        <div id="reportPreview"></div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ============ MODAL WEBINAIRE ============ -->
+<div class="modal-overlay" id="webinaireModal">
+  <div class="modal">
+    <div class="modal-header">
+      <h3 class="modal-title" id="webinaireModalTitle">Nouveau webinaire</h3>
+      <button class="modal-close" onclick="closeWebinaireForm()">×</button>
+    </div>
+    <div class="modal-body">
+      <form id="webinaireForm">
+        <input type="hidden" id="webinaire_id">
+
+        <div class="form-section">
+          <div class="form-section-title">Informations</div>
+          <div class="form-grid">
+            <div class="form-field">
+              <label class="form-label">Date</label>
+              <input type="date" class="form-input" id="f_date" required>
+            </div>
+            <div class="form-field">
+              <label class="form-label">Heure</label>
+              <input type="time" class="form-input" id="f_heure">
+            </div>
+            <div class="form-field full">
+              <label class="form-label">Titre</label>
+              <input type="text" class="form-input" id="f_titre" placeholder="Live Atelier Macarons" required>
+            </div>
+            <div class="form-field">
+              <label class="form-label">Type</label>
+              <select class="form-select" id="f_type">
+                <option value="atelier">Atelier</option>
+                <option value="conference">Conférence</option>
+                <option value="lancement">Lancement</option>
+                <option value="autre">Autre</option>
+              </select>
+            </div>
+            <div class="form-field">
+              <label class="form-label">Version pitch</label>
+              <input type="text" class="form-input" id="f_pitch_version" placeholder="V12">
+            </div>
+            <div class="form-field full">
+              <label class="form-label">Offre</label>
+              <input type="text" class="form-input" id="f_offre" placeholder="MFP 497€ ou 3×199€">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">Inscriptions</div>
+          <div class="form-grid-4">
+            <div class="form-field">
+              <label class="form-label">Total</label>
+              <input type="number" class="form-input" id="f_inscrits_total" min="0" value="0">
+            </div>
+            <div class="form-field">
+              <label class="form-label">Via Ads</label>
+              <input type="number" class="form-input" id="f_inscrits_ads" min="0" value="0">
+            </div>
+            <div class="form-field">
+              <label class="form-label">Organique</label>
+              <input type="number" class="form-input" id="f_inscrits_organique" min="0" value="0">
+            </div>
+            <div class="form-field">
+              <label class="form-label">Email list</label>
+              <input type="number" class="form-input" id="f_inscrits_email" min="0" value="0">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">Live</div>
+          <div class="form-grid-3">
+            <div class="form-field">
+              <label class="form-label">Pic présents</label>
+              <input type="number" class="form-input" id="f_presents_pic" min="0" value="0">
+            </div>
+            <div class="form-field">
+              <label class="form-label">Présents au pitch</label>
+              <input type="number" class="form-input" id="f_presents_pitch" min="0" value="0">
+            </div>
+            <div class="form-field">
+              <label class="form-label">Durée pitch (min)</label>
+              <input type="number" class="form-input" id="f_duree_pitch_min" min="0" value="0">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">Ventes</div>
+          <div class="form-grid-3">
+            <div class="form-field">
+              <label class="form-label">Nombre ventes</label>
+              <input type="number" class="form-input" id="f_ventes_count" min="0" value="0">
+            </div>
+            <div class="form-field">
+              <label class="form-label">CA total €</label>
+              <input type="number" class="form-input" id="f_ventes_montant_total" min="0" value="0" step="0.01">
+            </div>
+            <div class="form-field">
+              <label class="form-label">Dépense ads €</label>
+              <input type="number" class="form-input" id="f_ads_depense" min="0" value="0" step="0.01">
+            </div>
+          </div>
+          <div class="form-grid-3 mt-2">
+            <div class="form-field">
+              <label class="form-label">Paiements 1×</label>
+              <input type="number" class="form-input" id="f_paiements_1x" min="0" value="0">
+            </div>
+            <div class="form-field">
+              <label class="form-label">Paiements 3×</label>
+              <input type="number" class="form-input" id="f_paiements_3x" min="0" value="0">
+            </div>
+            <div class="form-field">
+              <label class="form-label">PayPal 4×</label>
+              <input type="number" class="form-input" id="f_paiements_4x_paypal" min="0" value="0">
+            </div>
+          </div>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">Objections rencontrées</div>
+          <div id="objectionsContainer" class="objection-list"></div>
+          <button type="button" class="btn-add" onclick="addObjection()">+ Ajouter une objection</button>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">Prospects DM à relancer</div>
+          <div id="dmContainer" class="dm-list"></div>
+          <button type="button" class="btn-add" onclick="addDmProspect()">+ Ajouter un prospect</button>
+        </div>
+
+        <div class="form-section">
+          <div class="form-section-title">Notes générales</div>
+          <div class="form-field">
+            <textarea class="form-textarea" id="f_notes_generales" placeholder="Observations, énergie, public..."></textarea>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="deleteBtn" onclick="deleteWebinaire()" style="display:none;">Supprimer</button>
+      <div class="modal-footer-right">
+        <button class="btn btn-secondary" onclick="closeWebinaireForm()">Annuler</button>
+        <button class="btn btn-primary" onclick="saveWebinaire()">Sauvegarder</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ============ MODAL ADD PROSPECT ============ -->
+<div class="modal-overlay" id="prospectModal">
+  <div class="modal" style="max-width:500px;">
+    <div class="modal-header">
+      <h3 class="modal-title">Ajouter un prospect</h3>
+      <button class="modal-close" onclick="closeAddProspect()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-section">
+        <div class="form-grid">
+          <div class="form-field full">
+            <label class="form-label">Webinaire</label>
+            <select class="form-select" id="p_webinaire"></select>
+          </div>
+          <div class="form-field full">
+            <label class="form-label">Prénom</label>
+            <input type="text" class="form-input" id="p_prenom">
+          </div>
+          <div class="form-field full">
+            <label class="form-label">Notes</label>
+            <textarea class="form-textarea" id="p_notes" placeholder="Hésite sur le prix, déjà fait formation X..."></textarea>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Status</label>
+            <select class="form-select" id="p_status">
+              <option value="a_envoyer">À envoyer</option>
+              <option value="envoye">Envoyé</option>
+              <option value="a_repondu">A répondu</option>
+              <option value="a_achete">A acheté</option>
+              <option value="perdu">Perdu</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Date relance</label>
+            <input type="date" class="form-input" id="p_date_relance">
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <div class="modal-footer-right">
+        <button class="btn btn-secondary" onclick="closeAddProspect()">Annuler</button>
+        <button class="btn btn-primary" onclick="saveProspect()">Ajouter</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================
+// AUTH SIMPLE (cookie 30 jours)
+// ============================================
+const AUTH_PASSWORD = 'geoffrey497';
+const AUTH_COOKIE = 'sdg_dashboard_auth';
+// Hash arbitraire stable (juste pour éviter d'écrire le password dans le cookie)
+const AUTH_TOKEN = 'lsg-dash-ok-v1';
+
+function setAuthCookie() {
+  const d = new Date();
+  d.setTime(d.getTime() + 30 * 24 * 60 * 60 * 1000);
+  document.cookie = `${AUTH_COOKIE}=${AUTH_TOKEN}; expires=${d.toUTCString()}; path=/; SameSite=Lax`;
+}
+
+function isAuthenticated() {
+  return document.cookie.split(';').some(c => c.trim().startsWith(`${AUTH_COOKIE}=${AUTH_TOKEN}`));
+}
+
+function hideAuth() {
+  document.getElementById('authOverlay').classList.add('hidden');
+}
+
+function showAuthError(msg) {
+  const err = document.getElementById('authError');
+  const box = document.getElementById('authBox');
+  err.textContent = msg;
+  box.classList.remove('shake');
+  // reflow pour relancer l'animation
+  void box.offsetWidth;
+  box.classList.add('shake');
+}
+
+function tryAuth() {
+  const pwd = document.getElementById('authPassword').value;
+  if (pwd === AUTH_PASSWORD) {
+    setAuthCookie();
+    hideAuth();
+    bootApp();
+  } else {
+    showAuthError('Mot de passe incorrect');
+    document.getElementById('authPassword').select();
+  }
+}
+
+document.getElementById('authBtn').addEventListener('click', tryAuth);
+document.getElementById('authPassword').addEventListener('keydown', e => {
+  if (e.key === 'Enter') tryAuth();
+});
+
+// ============================================
+// SUPABASE DATA LAYER
+// ============================================
+const supabase = {
+  url: 'https://mxnrqnpvcxwdwykzzchk.supabase.co',
+  key: 'sb_publishable_f_MKNNQu-CG7LqW3Bs0sUA_TIU2fBUf'
+};
+
+function sbHeaders(extra = {}) {
+  return {
+    'apikey': supabase.key,
+    'Authorization': `Bearer ${supabase.key}`,
+    'Content-Type': 'application/json',
+    ...extra
+  };
+}
+
+function uid() {
+  return 'xxxxxxxxxxxx4xxxyxxxxxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+// Champs propres à la table webinaires (sans objections / dm_prospects)
+function pickWebinaireFields(w) {
+  return {
+    date: w.date,
+    heure: w.heure || '18:00',
+    titre: w.titre,
+    type: w.type || 'atelier',
+    pitch_version: w.pitch_version || '',
+    offre: w.offre || '',
+    inscrits_total: +w.inscrits_total || 0,
+    inscrits_ads: +w.inscrits_ads || 0,
+    inscrits_organique: +w.inscrits_organique || 0,
+    inscrits_email: +w.inscrits_email || 0,
+    presents_pic: +w.presents_pic || 0,
+    presents_pitch: +w.presents_pitch || 0,
+    duree_pitch_min: +w.duree_pitch_min || 0,
+    ventes_count: +w.ventes_count || 0,
+    ventes_montant_total: +w.ventes_montant_total || 0,
+    paiements_1x: +w.paiements_1x || 0,
+    paiements_3x: +w.paiements_3x || 0,
+    paiements_4x_paypal: +w.paiements_4x_paypal || 0,
+    ads_depense: +w.ads_depense || 0,
+    notes_generales: w.notes_generales || ''
+  };
+}
+
+// Charge tous les webinaires + objections + dm_prospects en une requête (embed)
+async function sb_loadAllWebinaires() {
+  const url = `${supabase.url}/rest/v1/webinaires?select=*,objections(*),dm_prospects(*)&order=date.desc`;
+  const res = await fetch(url, { headers: sbHeaders() });
+  if (!res.ok) throw new Error(`Supabase load: ${res.status}`);
+  const rows = await res.json();
+  // Normalise : prix_moyen calculé côté client
+  return rows.map(w => ({
+    ...w,
+    objections: w.objections || [],
+    dm_prospects: w.dm_prospects || [],
+    prix_moyen: prixMoyen(w)
+  }));
+}
+
+// Crée un webinaire + insère objections et dm_prospects associés
+async function sb_createWebinaire(w) {
+  const payload = pickWebinaireFields(w);
+  const res = await fetch(`${supabase.url}/rest/v1/webinaires`, {
+    method: 'POST',
+    headers: sbHeaders({ 'Prefer': 'return=representation' }),
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(`Supabase create webinaire: ${res.status}`);
+  const created = (await res.json())[0];
+  const newId = created.id;
+
+  const objs = (w.objections || []).filter(o => o.texte && o.texte.trim()).map(o => ({
+    webinaire_id: newId,
+    texte: o.texte,
+    count: +o.count || 1
+  }));
+  if (objs.length > 0) {
+    await fetch(`${supabase.url}/rest/v1/objections`, {
+      method: 'POST',
+      headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify(objs)
+    });
+  }
+
+  const dms = (w.dm_prospects || []).filter(p => p.prenom && p.prenom.trim()).map(p => ({
+    webinaire_id: newId,
+    prenom: p.prenom,
+    notes: p.notes || '',
+    status: p.status || 'a_envoyer',
+    date_relance: p.date_relance || null
+  }));
+  if (dms.length > 0) {
+    await fetch(`${supabase.url}/rest/v1/dm_prospects`, {
+      method: 'POST',
+      headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify(dms)
+    });
+  }
+
+  return newId;
+}
+
+// Met à jour un webinaire (PATCH) + recrée objections + dm_prospects (delete all puis reinsert)
+async function sb_updateWebinaire(id, w) {
+  const payload = pickWebinaireFields(w);
+  const res = await fetch(`${supabase.url}/rest/v1/webinaires?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(`Supabase update webinaire: ${res.status}`);
+
+  // Diff objections : delete all + reinsert (le tableau est petit, c'est OK)
+  await fetch(`${supabase.url}/rest/v1/objections?webinaire_id=eq.${id}`, {
+    method: 'DELETE',
+    headers: sbHeaders()
+  });
+  const objs = (w.objections || []).filter(o => o.texte && o.texte.trim()).map(o => ({
+    webinaire_id: id,
+    texte: o.texte,
+    count: +o.count || 1
+  }));
+  if (objs.length > 0) {
+    await fetch(`${supabase.url}/rest/v1/objections`, {
+      method: 'POST',
+      headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify(objs)
+    });
+  }
+
+  // Diff dm_prospects : delete all + reinsert
+  await fetch(`${supabase.url}/rest/v1/dm_prospects?webinaire_id=eq.${id}`, {
+    method: 'DELETE',
+    headers: sbHeaders()
+  });
+  const dms = (w.dm_prospects || []).filter(p => p.prenom && p.prenom.trim()).map(p => ({
+    webinaire_id: id,
+    prenom: p.prenom,
+    notes: p.notes || '',
+    status: p.status || 'a_envoyer',
+    date_relance: p.date_relance || null
+  }));
+  if (dms.length > 0) {
+    await fetch(`${supabase.url}/rest/v1/dm_prospects`, {
+      method: 'POST',
+      headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+      body: JSON.stringify(dms)
+    });
+  }
+}
+
+async function sb_deleteWebinaire(id) {
+  const res = await fetch(`${supabase.url}/rest/v1/webinaires?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: sbHeaders()
+  });
+  if (!res.ok) throw new Error(`Supabase delete webinaire: ${res.status}`);
+}
+
+async function sb_updateDMProspect(id, fields) {
+  const res = await fetch(`${supabase.url}/rest/v1/dm_prospects?id=eq.${id}`, {
+    method: 'PATCH',
+    headers: sbHeaders({ 'Prefer': 'return=minimal' }),
+    body: JSON.stringify(fields)
+  });
+  if (!res.ok) throw new Error(`Supabase update dm_prospect: ${res.status}`);
+}
+
+async function sb_deleteDMProspect(id) {
+  const res = await fetch(`${supabase.url}/rest/v1/dm_prospects?id=eq.${id}`, {
+    method: 'DELETE',
+    headers: sbHeaders()
+  });
+  if (!res.ok) throw new Error(`Supabase delete dm_prospect: ${res.status}`);
+}
+
+async function sb_createDMProspect(p) {
+  const payload = {
+    webinaire_id: p.webinaire_id,
+    prenom: p.prenom,
+    notes: p.notes || '',
+    status: p.status || 'a_envoyer',
+    date_relance: p.date_relance || null
+  };
+  const res = await fetch(`${supabase.url}/rest/v1/dm_prospects`, {
+    method: 'POST',
+    headers: sbHeaders({ 'Prefer': 'return=representation' }),
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error(`Supabase create dm_prospect: ${res.status}`);
+  return (await res.json())[0];
+}
+
+async function sb_deleteAllWebinaires() {
+  // Hack pour delete-all : neq sur un uuid impossible (PostgREST exige un filtre)
+  const res = await fetch(`${supabase.url}/rest/v1/webinaires?id=neq.00000000-0000-0000-0000-000000000000`, {
+    method: 'DELETE',
+    headers: sbHeaders()
+  });
+  if (!res.ok) throw new Error(`Supabase delete all: ${res.status}`);
+}
+
+// Re-synchronise data depuis Supabase et déclenche un re-render
+async function reloadData() {
+  try {
+    const rows = await sb_loadAllWebinaires();
+    data.webinaires = rows;
+  } catch (e) {
+    console.error(e);
+    showErrorToast('Erreur de synchronisation');
+    throw e;
+  }
+}
+
+function showErrorToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast toast-error';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; }, 3000);
+  setTimeout(() => t.remove(), 3500);
+}
+
+// data : objet global reconstitué après chaque sb_loadAllWebinaires()
+let data = { webinaires: [] };
+
+// ============================================
+// HELPERS
+// ============================================
+function showup(w) { return w.inscrits_total > 0 ? (w.presents_pitch / w.inscrits_total * 100) : 0; }
+function conversion(w) { return w.presents_pitch > 0 ? (w.ventes_count / w.presents_pitch * 100) : 0; }
+function prixMoyen(w) { return w.ventes_count > 0 ? (w.ventes_montant_total / w.ventes_count) : 0; }
+function roi(w) { return w.ads_depense > 0 ? ((w.ventes_montant_total - w.ads_depense) / w.ads_depense * 100) : 0; }
+function cpa(w) { return w.ventes_count > 0 && w.ads_depense > 0 ? (w.ads_depense / w.ventes_count) : 0; }
+
+function fmt(n, d = 0) { return (Number(n) || 0).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+function fmtMoney(n) { return fmt(n, 0) + ' €'; }
+function fmtPct(n, d = 1) { return (Number(n) || 0).toFixed(d) + ' %'; }
+function fmtDate(d) {
+  if (!d) return '—';
+  const [y, m, day] = d.split('-');
+  return `${day}/${m}/${y}`;
+}
+
+function sortedWebinaires() {
+  return [...data.webinaires].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.className = 'toast';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity 0.3s'; }, 2200);
+  setTimeout(() => t.remove(), 2700);
+}
+
+// ============================================
+// NAVIGATION
+// ============================================
+document.querySelectorAll('.nav a').forEach(link => {
+  link.addEventListener('click', e => {
+    e.preventDefault();
+    document.querySelectorAll('.nav a').forEach(l => l.classList.remove('active'));
+    link.classList.add('active');
+    const page = link.dataset.page;
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById('page-' + page).classList.add('active');
+    refreshPage(page);
+  });
+});
+
+// Reset complet
+const btnReset = document.getElementById('btnReset');
+if (btnReset) {
+  btnReset.addEventListener('click', async () => {
+    const confirmation = prompt('Tape "RESET" pour effacer tous les webinaires, DM et objections. Cette action ne peut pas être annulée.');
+    if (confirmation === 'RESET') {
+      try {
+        await sb_deleteAllWebinaires();
+        await reloadData();
+        refreshPage('dashboard');
+        document.querySelectorAll('.nav a').forEach(l => l.classList.remove('active'));
+        document.querySelector('.nav a[data-page="dashboard"]').classList.add('active');
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById('page-dashboard').classList.add('active');
+        showToast('Dashboard remis à zéro');
+      } catch (e) {
+        console.error(e);
+        showErrorToast('Erreur de synchronisation');
+      }
+    }
+  });
+}
+
+function refreshPage(page) {
+  switch(page) {
+    case 'dashboard': renderDashboard(); break;
+    case 'webinaires': renderWebinaires(); break;
+    case 'comparaisons': renderComparaisons(); break;
+    case 'dm': renderDM(); break;
+    case 'objections': renderObjections(); break;
+    case 'rapports': renderRapports(); break;
+  }
+}
+
+// ============================================
+// CHART DEFAULTS
+// ============================================
+Chart.defaults.color = '#807060';
+Chart.defaults.font.family = "'Inter', sans-serif";
+Chart.defaults.borderColor = 'rgba(200, 160, 74, 0.12)';
+
+const goldGradient = (ctx, alpha1 = 0.3, alpha2 = 0.0) => {
+  if (!ctx) return 'rgba(200, 160, 74, 0.3)';
+  const gradient = ctx.createLinearGradient(0, 0, 0, 280);
+  gradient.addColorStop(0, `rgba(200, 160, 74, ${alpha1})`);
+  gradient.addColorStop(1, `rgba(200, 160, 74, ${alpha2})`);
+  return gradient;
+};
+
+const charts = {};
+
+function destroyChart(key) {
+  if (charts[key]) { charts[key].destroy(); delete charts[key]; }
+}
+
+// ============================================
+// DASHBOARD
+// ============================================
+function renderDashboard() {
+  const ws = sortedWebinaires();
+
+  // KPIs
+  let avgShowup = 0, avgConv = 0, totalCA = 0, totalSales = 0;
+  ws.forEach(w => {
+    avgShowup += showup(w);
+    avgConv += conversion(w);
+    totalCA += w.ventes_montant_total;
+    totalSales += w.ventes_count;
+  });
+  avgShowup = ws.length ? avgShowup / ws.length : 0;
+  avgConv = ws.length ? avgConv / ws.length : 0;
+  const avgPrice = totalSales > 0 ? totalCA / totalSales : 0;
+
+  // Trend (dernier vs avant-dernier)
+  let trendShowup = 0, trendConv = 0;
+  if (ws.length >= 2) {
+    const last = ws[ws.length - 1];
+    const prev = ws[ws.length - 2];
+    trendShowup = showup(last) - showup(prev);
+    trendConv = conversion(last) - conversion(prev);
+  }
+
+  document.getElementById('kpiGrid').innerHTML = `
+    ${kpiCard('📊', 'Show-up moyen', fmtPct(avgShowup), trendShowup)}
+    ${kpiCard('💰', 'Conversion moyenne', fmtPct(avgConv), trendConv)}
+    ${kpiCard('💎', 'CA cumulé', fmtMoney(totalCA), null)}
+    ${kpiCard('🎯', 'Prix moyen', fmtMoney(avgPrice), null)}
+  `;
+
+  // Charts
+  renderConversionChart(ws);
+  renderCAChart(ws);
+  renderSourcesChart(ws);
+  renderShowupChart(ws);
+
+  // Last webinaire
+  renderLastWebinaire(ws);
+}
+
+function kpiCard(icon, label, value, trend, unit = '') {
+  let trendHtml = '';
+  if (trend !== null) {
+    const cls = trend > 0.5 ? 'trend-up' : (trend < -0.5 ? 'trend-down' : 'trend-neutral');
+    const arrow = trend > 0.5 ? '▲' : (trend < -0.5 ? '▼' : '−');
+    trendHtml = `<span class="kpi-trend ${cls}">${arrow} ${Math.abs(trend).toFixed(1)} pts</span>`;
+  }
+  return `
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span class="kpi-icon">${icon}</span>
+        <span class="kpi-label-text">${label}</span>
+      </div>
+      <div class="kpi-value">${value}<span class="kpi-unit"></span></div>
+      ${trendHtml}
+    </div>
+  `;
+}
+
+function renderConversionChart(ws) {
+  destroyChart('conversion');
+  const ctx = document.getElementById('chartConversion').getContext('2d');
+  charts.conversion = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ws.map(w => fmtDate(w.date)),
+      datasets: [{
+        label: 'Conversion %',
+        data: ws.map(w => conversion(w).toFixed(2)),
+        borderColor: '#C8A04A',
+        backgroundColor: goldGradient(ctx, 0.3, 0),
+        fill: true,
+        tension: 0.35,
+        pointBackgroundColor: '#E0BE6B',
+        pointBorderColor: '#1A1410',
+        pointRadius: 5,
+        pointHoverRadius: 7,
+        borderWidth: 2.5
+      }]
+    },
+    options: chartOptions({ unit: '%' })
+  });
+}
+
+function renderCAChart(ws) {
+  destroyChart('ca');
+  const ctx = document.getElementById('chartCA').getContext('2d');
+  const avg = ws.length ? ws.reduce((s, w) => s + w.ventes_montant_total, 0) / ws.length : 0;
+  charts.ca = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ws.map(w => fmtDate(w.date)),
+      datasets: [{
+        label: 'CA €',
+        data: ws.map(w => w.ventes_montant_total),
+        backgroundColor: 'rgba(200, 160, 74, 0.7)',
+        borderColor: '#C8A04A',
+        borderWidth: 1,
+        borderRadius: 6
+      }, {
+        type: 'line',
+        label: 'Moyenne',
+        data: ws.map(() => avg),
+        borderColor: '#E0BE6B',
+        borderDash: [6, 4],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false
+      }]
+    },
+    options: chartOptions({ unit: '€' })
+  });
+}
+
+function renderSourcesChart(ws) {
+  destroyChart('sources');
+  const ctx = document.getElementById('chartSources').getContext('2d');
+  const total = { ads: 0, organique: 0, email: 0 };
+  ws.forEach(w => {
+    total.ads += w.inscrits_ads;
+    total.organique += w.inscrits_organique;
+    total.email += w.inscrits_email;
+  });
+  charts.sources = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Ads', 'Organique', 'Email'],
+      datasets: [{
+        data: [total.ads, total.organique, total.email],
+        backgroundColor: ['#C8A04A', '#E0BE6B', '#8a6f2b'],
+        borderColor: '#1A1410',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#FDF8F0', padding: 14, font: { size: 12 } } }
+      },
+      cutout: '60%'
+    }
+  });
+}
+
+function renderShowupChart(ws) {
+  destroyChart('showup');
+  const ctx = document.getElementById('chartShowup').getContext('2d');
+  charts.showup = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ws.map(w => fmtDate(w.date)),
+      datasets: [{
+        label: 'Show-up %',
+        data: ws.map(w => showup(w).toFixed(2)),
+        borderColor: '#E0BE6B',
+        backgroundColor: goldGradient(ctx, 0.2, 0),
+        fill: true,
+        tension: 0.35,
+        pointBackgroundColor: '#C8A04A',
+        pointBorderColor: '#1A1410',
+        pointRadius: 5,
+        borderWidth: 2.5
+      }]
+    },
+    options: chartOptions({ unit: '%' })
+  });
+}
+
+function chartOptions(opt = {}) {
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#2A1F18',
+        titleColor: '#E0BE6B',
+        bodyColor: '#FDF8F0',
+        borderColor: '#C8A04A',
+        borderWidth: 1,
+        padding: 12,
+        callbacks: opt.unit ? {
+          label: c => `${c.dataset.label}: ${c.formattedValue} ${opt.unit}`
+        } : {}
+      }
+    },
+    scales: {
+      x: { grid: { display: false }, ticks: { color: '#807060', font: { size: 11 } } },
+      y: { grid: { color: 'rgba(200, 160, 74, 0.08)' }, ticks: { color: '#807060', font: { size: 11 } } }
+    }
+  };
+}
+
+function renderLastWebinaire(ws) {
+  const container = document.getElementById('lastWebinaireContent');
+  if (ws.length === 0) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">Aucun webinaire</div><div class="empty-sub">Ajoute ton premier webinaire pour voir les stats</div></div>`;
+    return;
+  }
+  const last = ws[ws.length - 1];
+  const others = ws.slice(0, -1);
+
+  const avgShowupOthers = others.length ? others.reduce((s, w) => s + showup(w), 0) / others.length : 0;
+  const avgConvOthers = others.length ? others.reduce((s, w) => s + conversion(w), 0) / others.length : 0;
+  const avgCAOthers = others.length ? others.reduce((s, w) => s + w.ventes_montant_total, 0) / others.length : 0;
+
+  document.getElementById('lastWebinaireOverline').textContent = `${fmtDate(last.date)} · pitch ${last.pitch_version || '—'}`;
+
+  container.innerHTML = `
+    <table>
+      <thead>
+        <tr><th>Métrique</th><th>Dernier</th><th>Moyenne historique</th><th>Écart</th></tr>
+      </thead>
+      <tbody>
+        ${rowMetric('Inscrits', last.inscrits_total, others.length ? others.reduce((s, w) => s + w.inscrits_total, 0) / others.length : 0)}
+        ${rowMetric('Show-up %', showup(last), avgShowupOthers, '%')}
+        ${rowMetric('Présents au pitch', last.presents_pitch, others.length ? others.reduce((s, w) => s + w.presents_pitch, 0) / others.length : 0)}
+        ${rowMetric('Ventes', last.ventes_count, others.length ? others.reduce((s, w) => s + w.ventes_count, 0) / others.length : 0)}
+        ${rowMetric('Conversion %', conversion(last), avgConvOthers, '%')}
+        ${rowMetric('CA €', last.ventes_montant_total, avgCAOthers, '€')}
+      </tbody>
+    </table>
+  `;
+}
+
+function rowMetric(label, lastVal, avgVal, unit = '') {
+  const diff = lastVal - avgVal;
+  const cls = diff > 0 ? 'trend-up' : (diff < 0 ? 'trend-down' : 'trend-neutral');
+  const arrow = diff > 0 ? '▲' : (diff < 0 ? '▼' : '−');
+  const decimals = unit === '%' ? 1 : 0;
+  return `
+    <tr>
+      <td class="td-bold">${label}</td>
+      <td class="td-mono">${fmt(lastVal, decimals)} ${unit}</td>
+      <td class="td-mono td-muted">${fmt(avgVal, decimals)} ${unit}</td>
+      <td><span class="kpi-trend ${cls}">${arrow} ${fmt(Math.abs(diff), decimals)} ${unit}</span></td>
+    </tr>
+  `;
+}
+
+// ============================================
+// WEBINAIRES
+// ============================================
+let webinaireSort = { col: 'date', dir: 'desc' };
+
+function renderWebinaires() {
+  const ws = [...data.webinaires];
+  ws.sort((a, b) => {
+    let av, bv;
+    switch (webinaireSort.col) {
+      case 'showup': av = showup(a); bv = showup(b); break;
+      case 'conversion': av = conversion(a); bv = conversion(b); break;
+      default: av = a[webinaireSort.col]; bv = b[webinaireSort.col];
+    }
+    if (typeof av === 'string') return webinaireSort.dir === 'asc' ? av.localeCompare(bv) : bv.localeCompare(av);
+    return webinaireSort.dir === 'asc' ? av - bv : bv - av;
+  });
+
+  const tbody = document.getElementById('webinairesTable');
+  if (ws.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="9" class="text-center" style="padding:40px;color:var(--gris-mute);">Aucun webinaire. Clique sur "+ Nouveau webinaire" pour commencer.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = ws.map(w => `
+    <tr class="clickable" onclick="editWebinaire('${w.id}')">
+      <td class="td-mono">${fmtDate(w.date)}</td>
+      <td class="td-bold">${escapeHtml(w.titre)}</td>
+      <td><span class="status-badge status-envoye">${escapeHtml(w.pitch_version || '—')}</span></td>
+      <td>${fmt(w.inscrits_total)}</td>
+      <td>${fmt(w.presents_pitch)}</td>
+      <td class="td-gold">${fmtPct(showup(w))}</td>
+      <td>${fmt(w.ventes_count)}</td>
+      <td class="td-gold">${fmtPct(conversion(w))}</td>
+      <td class="td-bold">${fmtMoney(w.ventes_montant_total)}</td>
+    </tr>
+  `).join('');
+}
+
+document.querySelectorAll('#page-webinaires th[data-sort]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.sort;
+    if (webinaireSort.col === col) {
+      webinaireSort.dir = webinaireSort.dir === 'asc' ? 'desc' : 'asc';
+    } else {
+      webinaireSort = { col, dir: 'desc' };
+    }
+    renderWebinaires();
+  });
+});
+
+function escapeHtml(s) {
+  if (s == null) return '';
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+// ============================================
+// FORMULAIRE WEBINAIRE
+// ============================================
+let editingId = null;
+let tempObjections = [];
+let tempDmProspects = [];
+
+function openWebinaireForm() {
+  editingId = null;
+  document.getElementById('webinaireModalTitle').textContent = 'Nouveau webinaire';
+  document.getElementById('webinaireForm').reset();
+  document.getElementById('webinaire_id').value = '';
+  document.getElementById('deleteBtn').style.display = 'none';
+
+  // Préremplir date du jour
+  const today = new Date().toISOString().split('T')[0];
+  document.getElementById('f_date').value = today;
+
+  // Préremplir pitch version dernier
+  const ws = sortedWebinaires();
+  if (ws.length > 0) {
+    document.getElementById('f_pitch_version').value = ws[ws.length - 1].pitch_version || '';
+    document.getElementById('f_offre').value = ws[ws.length - 1].offre || '';
+  }
+
+  tempObjections = [];
+  tempDmProspects = [];
+  renderObjectionsInput();
+  renderDmInput();
+
+  document.getElementById('webinaireModal').classList.add('active');
+}
+
+function editWebinaire(id) {
+  const w = data.webinaires.find(x => x.id === id);
+  if (!w) return;
+  editingId = id;
+  document.getElementById('webinaireModalTitle').textContent = 'Modifier webinaire';
+  document.getElementById('webinaire_id').value = id;
+  document.getElementById('deleteBtn').style.display = 'inline-flex';
+
+  document.getElementById('f_date').value = w.date;
+  document.getElementById('f_heure').value = w.heure || '';
+  document.getElementById('f_titre').value = w.titre;
+  document.getElementById('f_type').value = w.type;
+  document.getElementById('f_pitch_version').value = w.pitch_version || '';
+  document.getElementById('f_offre').value = w.offre || '';
+  document.getElementById('f_inscrits_total').value = w.inscrits_total;
+  document.getElementById('f_inscrits_ads').value = w.inscrits_ads;
+  document.getElementById('f_inscrits_organique').value = w.inscrits_organique;
+  document.getElementById('f_inscrits_email').value = w.inscrits_email;
+  document.getElementById('f_presents_pic').value = w.presents_pic;
+  document.getElementById('f_presents_pitch').value = w.presents_pitch;
+  document.getElementById('f_duree_pitch_min').value = w.duree_pitch_min;
+  document.getElementById('f_ventes_count').value = w.ventes_count;
+  document.getElementById('f_ventes_montant_total').value = w.ventes_montant_total;
+  document.getElementById('f_paiements_1x').value = w.paiements_1x || 0;
+  document.getElementById('f_paiements_3x').value = w.paiements_3x || 0;
+  document.getElementById('f_paiements_4x_paypal').value = w.paiements_4x_paypal || 0;
+  document.getElementById('f_ads_depense').value = w.ads_depense || 0;
+  document.getElementById('f_notes_generales').value = w.notes_generales || '';
+
+  tempObjections = [...(w.objections || [])];
+  tempDmProspects = [...(w.dm_prospects || [])];
+  renderObjectionsInput();
+  renderDmInput();
+
+  document.getElementById('webinaireModal').classList.add('active');
+}
+
+function closeWebinaireForm() {
+  document.getElementById('webinaireModal').classList.remove('active');
+}
+
+async function saveWebinaire() {
+  const date = document.getElementById('f_date').value;
+  const titre = document.getElementById('f_titre').value.trim();
+  if (!date || !titre) {
+    alert('Date et titre obligatoires');
+    return;
+  }
+  const w = {
+    date,
+    heure: document.getElementById('f_heure').value,
+    titre,
+    type: document.getElementById('f_type').value,
+    pitch_version: document.getElementById('f_pitch_version').value.trim(),
+    offre: document.getElementById('f_offre').value.trim(),
+    inscrits_total: +document.getElementById('f_inscrits_total').value || 0,
+    inscrits_ads: +document.getElementById('f_inscrits_ads').value || 0,
+    inscrits_organique: +document.getElementById('f_inscrits_organique').value || 0,
+    inscrits_email: +document.getElementById('f_inscrits_email').value || 0,
+    presents_pic: +document.getElementById('f_presents_pic').value || 0,
+    presents_pitch: +document.getElementById('f_presents_pitch').value || 0,
+    duree_pitch_min: +document.getElementById('f_duree_pitch_min').value || 0,
+    ventes_count: +document.getElementById('f_ventes_count').value || 0,
+    ventes_montant_total: +document.getElementById('f_ventes_montant_total').value || 0,
+    paiements_1x: +document.getElementById('f_paiements_1x').value || 0,
+    paiements_3x: +document.getElementById('f_paiements_3x').value || 0,
+    paiements_4x_paypal: +document.getElementById('f_paiements_4x_paypal').value || 0,
+    ads_depense: +document.getElementById('f_ads_depense').value || 0,
+    objections: tempObjections.filter(o => o.texte && o.texte.trim()),
+    dm_prospects: tempDmProspects.filter(p => p.prenom && p.prenom.trim()),
+    notes_generales: document.getElementById('f_notes_generales').value
+  };
+
+  try {
+    if (editingId) {
+      await sb_updateWebinaire(editingId, w);
+    } else {
+      await sb_createWebinaire(w);
+    }
+    await reloadData();
+    closeWebinaireForm();
+    showToast(editingId ? 'Webinaire mis à jour' : 'Webinaire créé');
+    refreshPage('webinaires');
+  } catch (e) {
+    console.error(e);
+    showErrorToast('Erreur de synchronisation');
+  }
+}
+
+async function deleteWebinaire() {
+  if (!editingId) return;
+  if (!confirm('Supprimer ce webinaire ? Action irréversible.')) return;
+  try {
+    await sb_deleteWebinaire(editingId);
+    await reloadData();
+    closeWebinaireForm();
+    showToast('Webinaire supprimé');
+    refreshPage('webinaires');
+  } catch (e) {
+    console.error(e);
+    showErrorToast('Erreur de synchronisation');
+  }
+}
+
+function addObjection() {
+  tempObjections.push({ texte: '', count: 1 });
+  renderObjectionsInput();
+}
+
+function removeObjection(i) {
+  tempObjections.splice(i, 1);
+  renderObjectionsInput();
+}
+
+function renderObjectionsInput() {
+  const c = document.getElementById('objectionsContainer');
+  c.innerHTML = tempObjections.map((o, i) => `
+    <div class="list-row">
+      <input type="text" placeholder="Texte de l'objection" value="${escapeHtml(o.texte)}" oninput="tempObjections[${i}].texte = this.value">
+      <input type="number" min="1" value="${o.count}" oninput="tempObjections[${i}].count = +this.value || 1">
+      <button type="button" class="btn-tiny" onclick="removeObjection(${i})">×</button>
+    </div>
+  `).join('');
+}
+
+function addDmProspect() {
+  tempDmProspects.push({ id: uid(), prenom: '', notes: '', status: 'a_envoyer', date_relance: null });
+  renderDmInput();
+}
+
+function removeDmProspect(i) {
+  tempDmProspects.splice(i, 1);
+  renderDmInput();
+}
+
+function renderDmInput() {
+  const c = document.getElementById('dmContainer');
+  c.innerHTML = tempDmProspects.map((p, i) => `
+    <div class="list-row" style="grid-template-columns: 1fr 1fr auto auto;">
+      <input type="text" placeholder="Prénom" value="${escapeHtml(p.prenom)}" oninput="tempDmProspects[${i}].prenom = this.value">
+      <input type="text" placeholder="Notes" value="${escapeHtml(p.notes)}" oninput="tempDmProspects[${i}].notes = this.value">
+      <select onchange="tempDmProspects[${i}].status = this.value">
+        <option value="a_envoyer" ${p.status === 'a_envoyer' ? 'selected' : ''}>À envoyer</option>
+        <option value="envoye" ${p.status === 'envoye' ? 'selected' : ''}>Envoyé</option>
+        <option value="a_repondu" ${p.status === 'a_repondu' ? 'selected' : ''}>A répondu</option>
+        <option value="a_achete" ${p.status === 'a_achete' ? 'selected' : ''}>A acheté</option>
+        <option value="perdu" ${p.status === 'perdu' ? 'selected' : ''}>Perdu</option>
+      </select>
+      <button type="button" class="btn-tiny" onclick="removeDmProspect(${i})">×</button>
+    </div>
+  `).join('');
+}
+
+// ============================================
+// CSV IMPORT
+// ============================================
+document.getElementById('csvImport').addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  Papa.parse(file, {
+    header: true,
+    skipEmptyLines: true,
+    complete: results => {
+      try {
+        const rows = results.data;
+        if (rows.length === 0) {
+          alert('CSV vide ou format invalide');
+          return;
+        }
+        const totalInscrits = rows.length;
+        // Détection des présents : colonne "Attended", "Présent", "Live attendance"
+        let presents = 0;
+        rows.forEach(r => {
+          const keys = Object.keys(r);
+          for (const k of keys) {
+            const v = String(r[k] || '').toLowerCase();
+            if (k.toLowerCase().includes('attend') && (v === 'yes' || v === 'oui' || v === 'true' || v === '1')) {
+              presents++; break;
+            }
+          }
+        });
+
+        // Sources
+        let ads = 0, organique = 0, email = 0;
+        rows.forEach(r => {
+          const src = String(r['Source'] || r['source'] || r['Origin'] || '').toLowerCase();
+          if (src.includes('ads') || src.includes('facebook') || src.includes('meta')) ads++;
+          else if (src.includes('email') || src.includes('mail')) email++;
+          else organique++;
+        });
+
+        // Pré-remplir le formulaire
+        openWebinaireForm();
+        document.getElementById('f_inscrits_total').value = totalInscrits;
+        document.getElementById('f_presents_pic').value = presents;
+        document.getElementById('f_presents_pitch').value = presents;
+        document.getElementById('f_inscrits_ads').value = ads;
+        document.getElementById('f_inscrits_organique').value = organique;
+        document.getElementById('f_inscrits_email').value = email;
+        showToast(`CSV importé : ${totalInscrits} inscrits, ${presents} présents`);
+      } catch (err) {
+        console.error(err);
+        alert('Erreur de parsing CSV : ' + err.message);
+      }
+      e.target.value = '';
+    },
+    error: err => { alert('Erreur CSV : ' + err.message); e.target.value = ''; }
+  });
+});
+
+// ============================================
+// COMPARAISONS
+// ============================================
+let compareSelected = [];
+
+function renderComparaisons() {
+  const ws = sortedWebinaires();
+  const opts = document.getElementById('compareOptions');
+  if (ws.length === 0) {
+    opts.innerHTML = `<div class="empty-sub">Aucun webinaire à comparer.</div>`;
+    document.getElementById('compareResults').innerHTML = '';
+    return;
+  }
+  opts.innerHTML = ws.map(w => `
+    <label class="compare-checkbox ${compareSelected.includes(w.id) ? 'checked' : ''}">
+      <input type="checkbox" value="${w.id}" ${compareSelected.includes(w.id) ? 'checked' : ''} onchange="toggleCompare('${w.id}', this.checked)">
+      <div>
+        <div class="compare-label">${escapeHtml(w.titre)}</div>
+        <div class="compare-label-sub">${fmtDate(w.date)} · ${w.pitch_version || '—'}</div>
+      </div>
+    </label>
+  `).join('');
+  renderCompareResults();
+}
+
+function toggleCompare(id, checked) {
+  if (checked) {
+    if (compareSelected.length >= 5) {
+      showToast('Maximum 5 webinaires');
+      event.target.checked = false;
+      return;
+    }
+    compareSelected.push(id);
+  } else {
+    compareSelected = compareSelected.filter(x => x !== id);
+  }
+  renderComparaisons();
+}
+
+function renderCompareResults() {
+  const container = document.getElementById('compareResults');
+  if (compareSelected.length < 2) {
+    container.innerHTML = `<div class="empty"><div class="empty-icon">🔄</div><div class="empty-title">Sélectionne au moins 2 webinaires</div><div class="empty-sub">Pour démarrer la comparaison</div></div>`;
+    return;
+  }
+  const ws = compareSelected.map(id => data.webinaires.find(w => w.id === id)).filter(Boolean);
+  if (ws.length < 2) return;
+
+  const metrics = [
+    { key: 'inscrits_total', label: 'Inscrits', better: 'high', unit: '' },
+    { key: 'presents_pitch', label: 'Présents pitch', better: 'high', unit: '' },
+    { key: 'showup', label: 'Show-up', better: 'high', unit: '%', calc: showup },
+    { key: 'ventes_count', label: 'Ventes', better: 'high', unit: '' },
+    { key: 'conversion', label: 'Conversion', better: 'high', unit: '%', calc: conversion },
+    { key: 'ventes_montant_total', label: 'CA', better: 'high', unit: '€' },
+    { key: 'prix_moyen', label: 'Prix moyen', better: 'high', unit: '€', calc: prixMoyen },
+    { key: 'duree_pitch_min', label: 'Durée pitch', better: 'low', unit: 'min' },
+    { key: 'ads_depense', label: 'Dépense ads', better: 'low', unit: '€' },
+    { key: 'roi', label: 'ROI ads', better: 'high', unit: '%', calc: roi }
+  ];
+
+  // Compute best/worst per metric
+  const rows = metrics.map(m => {
+    const values = ws.map(w => m.calc ? m.calc(w) : w[m.key]);
+    const max = Math.max(...values);
+    const min = Math.min(...values);
+    return { ...m, values, max, min };
+  });
+
+  // Build table
+  let html = `
+    <div class="table-card">
+      <div class="table-header">
+        <h3 class="table-title">Comparaison côte à côte</h3>
+      </div>
+      <div class="compare-table-wrap">
+        <table class="compare-table">
+          <thead>
+            <tr>
+              <th>Métrique</th>
+              ${ws.map(w => `<th>${escapeHtml(w.pitch_version || w.titre)}<br><span class="td-muted" style="font-weight:400;text-transform:none;">${fmtDate(w.date)}</span></th>`).join('')}
+            </tr>
+          </thead>
+          <tbody>
+            ${rows.map(r => `
+              <tr>
+                <td class="td-bold">${r.label}</td>
+                ${r.values.map(v => {
+                  const isBest = r.better === 'high' ? v === r.max : v === r.min;
+                  const isWorst = r.better === 'high' ? v === r.min : v === r.max;
+                  const same = r.max === r.min;
+                  const cls = !same && isBest ? 'cell-best' : (!same && isWorst ? 'cell-worst' : '');
+                  return `<td class="${cls} td-mono">${fmt(v, r.unit === '%' ? 1 : 0)} ${r.unit}</td>`;
+                }).join('')}
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="chart-card mt-2">
+      <div class="chart-header">
+        <h3 class="chart-title">Show-up & Conversion</h3>
+      </div>
+      <div class="chart-wrap"><canvas id="chartCompareBar"></canvas></div>
+    </div>
+  `;
+
+  // Insight auto
+  const convs = ws.map(w => ({ w, conv: conversion(w) }));
+  const maxConv = Math.max(...convs.map(c => c.conv));
+  const minConv = Math.min(...convs.map(c => c.conv));
+  if (maxConv > 0 && minConv > 0 && maxConv >= minConv * 1.5) {
+    const best = convs.filter(c => c.conv === maxConv).map(c => c.w.pitch_version || c.w.titre).join(', ');
+    const worst = convs.filter(c => c.conv === minConv).map(c => c.w.pitch_version || c.w.titre).join(', ');
+    const pct = Math.round(((maxConv - minConv) / minConv) * 100);
+    html += `<div class="insight"><span class="insight-icon">✦</span> ${escapeHtml(best)} convertit <b>+${pct}%</b> de mieux que ${escapeHtml(worst)}. À analyser : qu'est-ce qui change dans la structure du pitch.</div>`;
+  }
+
+  container.innerHTML = html;
+
+  destroyChart('compareBar');
+  const ctx = document.getElementById('chartCompareBar').getContext('2d');
+  charts.compareBar = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ws.map(w => w.pitch_version || w.titre),
+      datasets: [
+        {
+          label: 'Show-up %',
+          data: ws.map(w => showup(w).toFixed(2)),
+          backgroundColor: 'rgba(224, 190, 107, 0.7)',
+          borderColor: '#E0BE6B',
+          borderWidth: 1,
+          borderRadius: 6
+        },
+        {
+          label: 'Conversion %',
+          data: ws.map(w => conversion(w).toFixed(2)),
+          backgroundColor: 'rgba(200, 160, 74, 0.85)',
+          borderColor: '#C8A04A',
+          borderWidth: 1,
+          borderRadius: 6
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { labels: { color: '#FDF8F0' } },
+        tooltip: { backgroundColor: '#2A1F18', borderColor: '#C8A04A', borderWidth: 1 }
+      },
+      scales: {
+        x: { grid: { display: false }, ticks: { color: '#807060' } },
+        y: { grid: { color: 'rgba(200, 160, 74, 0.08)' }, ticks: { color: '#807060', callback: v => v + '%' } }
+      }
+    }
+  });
+}
+
+// ============================================
+// DM TRACKING
+// ============================================
+let dmFilter = 'tous';
+
+function renderDM() {
+  const all = [];
+  data.webinaires.forEach(w => {
+    (w.dm_prospects || []).forEach(p => {
+      all.push({ ...p, webinaire_id: w.id, webinaire_titre: w.titre, webinaire_date: w.date });
+    });
+  });
+
+  // Stats
+  const counts = {
+    a_envoyer: all.filter(p => p.status === 'a_envoyer').length,
+    a_achete: all.filter(p => p.status === 'a_achete').length,
+    total: all.length
+  };
+  const taux = counts.total > 0 ? (counts.a_achete / counts.total * 100) : 0;
+  document.getElementById('dmStats').innerHTML = `
+    ${kpiCardSmall('💬', 'Relances à faire', counts.a_envoyer, '')}
+    ${kpiCardSmall('💰', 'Conversions DM', counts.a_achete, '')}
+    ${kpiCardSmall('📈', 'Taux conversion DM', fmtPct(taux), '')}
+  `;
+
+  // Filtres
+  const filtered = dmFilter === 'tous' ? all : all.filter(p => p.status === dmFilter);
+  filtered.sort((a, b) => (b.webinaire_date || '').localeCompare(a.webinaire_date || ''));
+
+  const tbody = document.getElementById('dmTable');
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" class="text-center" style="padding:40px;color:var(--gris-mute);">Aucun prospect dans cette catégorie.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(p => `
+    <tr>
+      <td class="td-bold">${escapeHtml(p.prenom)}</td>
+      <td><span class="td-muted">${escapeHtml(p.webinaire_titre)}</span><br><span class="td-mono" style="font-size:11px;color:var(--gris-mute);">${fmtDate(p.webinaire_date)}</span></td>
+      <td>
+        <select onchange="updateDmStatus('${p.webinaire_id}', '${p.id}', this.value)" class="form-select" style="padding: 4px 10px; font-size: 12px;">
+          <option value="a_envoyer" ${p.status === 'a_envoyer' ? 'selected' : ''}>À envoyer</option>
+          <option value="envoye" ${p.status === 'envoye' ? 'selected' : ''}>Envoyé</option>
+          <option value="a_repondu" ${p.status === 'a_repondu' ? 'selected' : ''}>A répondu</option>
+          <option value="a_achete" ${p.status === 'a_achete' ? 'selected' : ''}>A acheté</option>
+          <option value="perdu" ${p.status === 'perdu' ? 'selected' : ''}>Perdu</option>
+        </select>
+      </td>
+      <td class="td-mono">
+        <input type="date" value="${p.date_relance || ''}" onchange="updateDmDate('${p.webinaire_id}', '${p.id}', this.value)" class="form-input" style="padding: 4px 10px; font-size: 12px;">
+      </td>
+      <td><span class="td-muted">${escapeHtml(p.notes)}</span></td>
+      <td><button class="btn-tiny" onclick="deleteDmProspect('${p.webinaire_id}', '${p.id}')">×</button></td>
+    </tr>
+  `).join('');
+}
+
+function kpiCardSmall(icon, label, value) {
+  return `
+    <div class="kpi-card">
+      <div class="kpi-label">
+        <span class="kpi-icon">${icon}</span>
+        <span class="kpi-label-text">${label}</span>
+      </div>
+      <div class="kpi-value small">${value}</div>
+    </div>
+  `;
+}
+
+async function updateDmStatus(wid, pid, status) {
+  const w = data.webinaires.find(x => x.id === wid);
+  if (!w) return;
+  const p = (w.dm_prospects || []).find(x => x.id === pid);
+  if (!p) return;
+  p.status = status;
+  try {
+    await sb_updateDMProspect(pid, { status });
+    renderDM();
+  } catch (e) {
+    console.error(e);
+    showErrorToast('Erreur de synchronisation');
+  }
+}
+
+async function updateDmDate(wid, pid, date) {
+  const w = data.webinaires.find(x => x.id === wid);
+  if (!w) return;
+  const p = (w.dm_prospects || []).find(x => x.id === pid);
+  if (!p) return;
+  p.date_relance = date || null;
+  try {
+    await sb_updateDMProspect(pid, { date_relance: date || null });
+  } catch (e) {
+    console.error(e);
+    showErrorToast('Erreur de synchronisation');
+  }
+}
+
+async function deleteDmProspect(wid, pid) {
+  if (!confirm('Supprimer ce prospect ?')) return;
+  try {
+    await sb_deleteDMProspect(pid);
+    const w = data.webinaires.find(x => x.id === wid);
+    if (w) w.dm_prospects = (w.dm_prospects || []).filter(x => x.id !== pid);
+    renderDM();
+  } catch (e) {
+    console.error(e);
+    showErrorToast('Erreur de synchronisation');
+  }
+}
+
+document.querySelectorAll('#dmFilters .filter-chip').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('#dmFilters .filter-chip').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    dmFilter = btn.dataset.filter;
+    renderDM();
+  });
+});
+
+function openAddProspect() {
+  const sel = document.getElementById('p_webinaire');
+  sel.innerHTML = sortedWebinaires().map(w => `<option value="${w.id}">${escapeHtml(w.titre)} (${fmtDate(w.date)})</option>`).join('');
+  document.getElementById('p_prenom').value = '';
+  document.getElementById('p_notes').value = '';
+  document.getElementById('p_status').value = 'a_envoyer';
+  document.getElementById('p_date_relance').value = '';
+  document.getElementById('prospectModal').classList.add('active');
+}
+
+function closeAddProspect() {
+  document.getElementById('prospectModal').classList.remove('active');
+}
+
+async function saveProspect() {
+  const wid = document.getElementById('p_webinaire').value;
+  const prenom = document.getElementById('p_prenom').value.trim();
+  if (!prenom) {
+    alert('Prénom obligatoire');
+    return;
+  }
+  const w = data.webinaires.find(x => x.id === wid);
+  if (!w) return;
+  try {
+    const created = await sb_createDMProspect({
+      webinaire_id: wid,
+      prenom,
+      notes: document.getElementById('p_notes').value,
+      status: document.getElementById('p_status').value,
+      date_relance: document.getElementById('p_date_relance').value || null
+    });
+    if (!w.dm_prospects) w.dm_prospects = [];
+    w.dm_prospects.push(created);
+    closeAddProspect();
+    showToast('Prospect ajouté');
+    renderDM();
+  } catch (e) {
+    console.error(e);
+    showErrorToast('Erreur de synchronisation');
+  }
+}
+
+// ============================================
+// OBJECTIONS
+// ============================================
+function renderObjections() {
+  // Agréger
+  const map = {};
+  data.webinaires.forEach(w => {
+    (w.objections || []).forEach(o => {
+      const key = o.texte.toLowerCase().trim();
+      if (!key) return;
+      if (!map[key]) map[key] = { texte: o.texte, count: 0, webinaires: [] };
+      map[key].count += o.count;
+      map[key].webinaires.push({ id: w.id, titre: w.titre, date: w.date });
+    });
+  });
+  const list = Object.values(map).sort((a, b) => b.count - a.count);
+
+  // Chart
+  destroyChart('objections');
+  const top = list.slice(0, 10);
+  const ctx = document.getElementById('chartObjections').getContext('2d');
+  if (top.length === 0) {
+    document.getElementById('objectionsTable').innerHTML = `<tr><td colspan="3" class="text-center" style="padding:40px;color:var(--gris-mute);">Aucune objection enregistrée.</td></tr>`;
+    return;
+  }
+  charts.objections = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: top.map(o => o.texte),
+      datasets: [{
+        label: 'Fréquence',
+        data: top.map(o => o.count),
+        backgroundColor: 'rgba(200, 160, 74, 0.7)',
+        borderColor: '#C8A04A',
+        borderWidth: 1,
+        borderRadius: 6
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      indexAxis: 'y',
+      plugins: {
+        legend: { display: false },
+        tooltip: { backgroundColor: '#2A1F18', borderColor: '#C8A04A', borderWidth: 1 }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(200, 160, 74, 0.08)' }, ticks: { color: '#807060' } },
+        y: { grid: { display: false }, ticks: { color: '#FDF8F0', font: { size: 12 } } }
+      }
+    }
+  });
+
+  // Table
+  document.getElementById('objectionsTable').innerHTML = list.map(o => `
+    <tr>
+      <td class="td-bold">${escapeHtml(o.texte)}</td>
+      <td class="td-gold td-mono">${o.count}</td>
+      <td class="td-muted" style="font-size:13px;">${o.webinaires.map(w => fmtDate(w.date) + ' — ' + escapeHtml(w.titre)).join('<br>')}</td>
+    </tr>
+  `).join('');
+}
+
+// ============================================
+// RAPPORTS / ROI
+// ============================================
+function renderRapports() {
+  const ws = sortedWebinaires().filter(w => w.ads_depense > 0);
+  const tbody = document.getElementById('roiTable');
+  if (ws.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" class="text-center" style="padding:30px;color:var(--gris-mute);">Aucun webinaire avec dépense ads enregistrée.</td></tr>`;
+  } else {
+    tbody.innerHTML = ws.map(w => {
+      const r = roi(w);
+      const c = cpa(w);
+      const cls = r > 0 ? 'td-gold' : (r < 0 ? '' : 'td-muted');
+      return `
+        <tr>
+          <td class="td-mono">${fmtDate(w.date)}</td>
+          <td class="td-bold">${escapeHtml(w.titre)}</td>
+          <td>${fmtMoney(w.ads_depense)}</td>
+          <td>${fmtMoney(w.ventes_montant_total)}</td>
+          <td class="${cls}">${fmtPct(r, 0)}</td>
+          <td>${fmtMoney(c)}</td>
+          <td>${fmt(w.ventes_count)}</td>
+        </tr>
+      `;
+    }).join('');
+  }
+
+  destroyChart('roi');
+  const ctx = document.getElementById('chartROI').getContext('2d');
+  charts.roi = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: ws.map(w => fmtDate(w.date)),
+      datasets: [{
+        label: 'ROI %',
+        data: ws.map(w => roi(w).toFixed(0)),
+        borderColor: '#C8A04A',
+        backgroundColor: goldGradient(ctx, 0.25, 0),
+        fill: true,
+        tension: 0.35,
+        pointBackgroundColor: '#E0BE6B',
+        pointRadius: 5,
+        borderWidth: 2.5
+      }]
+    },
+    options: chartOptions({ unit: '%' })
+  });
+}
+
+function generateReport() {
+  const period = document.getElementById('reportPeriod').value;
+  const now = new Date();
+  let cutoff;
+  switch(period) {
+    case 'week': cutoff = new Date(now.getTime() - 7 * 86400000); break;
+    case 'month': cutoff = new Date(now.getTime() - 30 * 86400000); break;
+    case 'quarter': cutoff = new Date(now.getTime() - 90 * 86400000); break;
+    default: cutoff = new Date(0);
+  }
+  const ws = sortedWebinaires().filter(w => new Date(w.date) >= cutoff);
+  if (ws.length === 0) {
+    showToast('Aucun webinaire sur cette période');
+    return;
+  }
+
+  // KPIs
+  const totalInscrits = ws.reduce((s, w) => s + w.inscrits_total, 0);
+  const totalPresents = ws.reduce((s, w) => s + w.presents_pitch, 0);
+  const totalSales = ws.reduce((s, w) => s + w.ventes_count, 0);
+  const totalCA = ws.reduce((s, w) => s + w.ventes_montant_total, 0);
+  const totalAds = ws.reduce((s, w) => s + w.ads_depense, 0);
+  const avgShowup = ws.reduce((s, w) => s + showup(w), 0) / ws.length;
+  const avgConv = ws.reduce((s, w) => s + conversion(w), 0) / ws.length;
+
+  // Top objections
+  const objMap = {};
+  ws.forEach(w => (w.objections || []).forEach(o => {
+    const k = o.texte.toLowerCase().trim();
+    if (!k) return;
+    objMap[k] = (objMap[k] || { texte: o.texte, count: 0 });
+    objMap[k].count += o.count;
+  }));
+  const topObj = Object.values(objMap).sort((a, b) => b.count - a.count).slice(0, 5);
+
+  const periodLabel = { all: 'Tout l\'historique', week: '7 derniers jours', month: '30 derniers jours', quarter: '90 derniers jours' }[period];
+
+  const html = `
+    <div class="report-area" id="reportContent" style="font-family: 'Inter', sans-serif;">
+      <div style="text-align:center; padding: 30px 0; border-bottom: 2px solid #C8A04A;">
+        <div style="font-family: 'Cormorant Garamond', serif; font-size: 48px; font-weight: 600; color: #8a6f2b;" class="report-gold">Les Secrets De Geoffrey</div>
+        <div style="font-family: 'Courier New', monospace; font-size: 11px; letter-spacing: 3px; text-transform: uppercase; color: #8a6f2b; margin-top: 8px;" class="report-gold">Rapport Webinaires</div>
+        <div style="font-family: 'Cormorant Garamond', serif; font-style: italic; color: #8a6f2b; margin-top: 12px; font-size: 17px;" class="report-gold">${periodLabel} · Édité le ${fmtDate(now.toISOString().split('T')[0])}</div>
+      </div>
+
+      <div style="margin: 40px 0;">
+        <h2 style="font-family: 'Cormorant Garamond', serif; font-size: 28px; color: #1A1410; margin-bottom: 16px;">KPIs globaux</h2>
+        <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px;">
+          <div style="padding: 16px; border: 1px solid #C8A04A; border-radius: 8px;">
+            <div style="font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #807060;">Webinaires</div>
+            <div style="font-family: 'Cormorant Garamond', serif; font-size: 36px; color: #8a6f2b;" class="report-gold">${ws.length}</div>
+          </div>
+          <div style="padding: 16px; border: 1px solid #C8A04A; border-radius: 8px;">
+            <div style="font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #807060;">Total inscrits</div>
+            <div style="font-family: 'Cormorant Garamond', serif; font-size: 36px; color: #8a6f2b;" class="report-gold">${fmt(totalInscrits)}</div>
+          </div>
+          <div style="padding: 16px; border: 1px solid #C8A04A; border-radius: 8px;">
+            <div style="font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #807060;">Ventes</div>
+            <div style="font-family: 'Cormorant Garamond', serif; font-size: 36px; color: #8a6f2b;" class="report-gold">${totalSales}</div>
+          </div>
+          <div style="padding: 16px; border: 1px solid #C8A04A; border-radius: 8px;">
+            <div style="font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #807060;">CA total</div>
+            <div style="font-family: 'Cormorant Garamond', serif; font-size: 36px; color: #8a6f2b;" class="report-gold">${fmtMoney(totalCA)}</div>
+          </div>
+          <div style="padding: 16px; border: 1px solid #C8A04A; border-radius: 8px;">
+            <div style="font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #807060;">Show-up moyen</div>
+            <div style="font-family: 'Cormorant Garamond', serif; font-size: 36px; color: #8a6f2b;" class="report-gold">${fmtPct(avgShowup)}</div>
+          </div>
+          <div style="padding: 16px; border: 1px solid #C8A04A; border-radius: 8px;">
+            <div style="font-family: 'Courier New', monospace; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #807060;">Conversion moyenne</div>
+            <div style="font-family: 'Cormorant Garamond', serif; font-size: 36px; color: #8a6f2b;" class="report-gold">${fmtPct(avgConv)}</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin: 40px 0; page-break-before: auto;">
+        <h2 style="font-family: 'Cormorant Garamond', serif; font-size: 28px; color: #1A1410; margin-bottom: 16px;">Webinaires de la période</h2>
+        <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+          <thead>
+            <tr style="background: #FDF8F0;">
+              <th style="text-align:left; padding: 10px; border: 1px solid #C8A04A; color: #8a6f2b;" class="report-gold">Date</th>
+              <th style="text-align:left; padding: 10px; border: 1px solid #C8A04A; color: #8a6f2b;" class="report-gold">Titre</th>
+              <th style="padding: 10px; border: 1px solid #C8A04A; color: #8a6f2b;" class="report-gold">Pitch</th>
+              <th style="padding: 10px; border: 1px solid #C8A04A; color: #8a6f2b;" class="report-gold">Inscrits</th>
+              <th style="padding: 10px; border: 1px solid #C8A04A; color: #8a6f2b;" class="report-gold">Show-up</th>
+              <th style="padding: 10px; border: 1px solid #C8A04A; color: #8a6f2b;" class="report-gold">Conv</th>
+              <th style="padding: 10px; border: 1px solid #C8A04A; color: #8a6f2b;" class="report-gold">CA</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${ws.map(w => `
+              <tr>
+                <td style="padding: 10px; border: 1px solid #ddd; font-family: 'Courier New', monospace;">${fmtDate(w.date)}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(w.titre)}</td>
+                <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(w.pitch_version || '—')}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align:right;">${fmt(w.inscrits_total)}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align:right;">${fmtPct(showup(w))}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align:right; font-weight:600; color:#8a6f2b;" class="report-gold">${fmtPct(conversion(w))}</td>
+                <td style="padding: 10px; border: 1px solid #ddd; text-align:right; font-weight:600;">${fmtMoney(w.ventes_montant_total)}</td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      ${topObj.length > 0 ? `
+      <div style="margin: 40px 0;">
+        <h2 style="font-family: 'Cormorant Garamond', serif; font-size: 28px; color: #1A1410; margin-bottom: 16px;">Top objections</h2>
+        <ol style="padding-left: 20px;">
+          ${topObj.map(o => `<li style="margin-bottom: 8px;"><b>${escapeHtml(o.texte)}</b> · ${o.count} fois</li>`).join('')}
+        </ol>
+      </div>
+      ` : ''}
+
+      ${totalAds > 0 ? `
+      <div style="margin: 40px 0;">
+        <h2 style="font-family: 'Cormorant Garamond', serif; font-size: 28px; color: #1A1410; margin-bottom: 16px;">ROI Ads</h2>
+        <p>Dépense totale : <b>${fmtMoney(totalAds)}</b></p>
+        <p>CA généré : <b>${fmtMoney(totalCA)}</b></p>
+        <p>ROI global : <b style="color:#8a6f2b;" class="report-gold">${fmtPct((totalCA - totalAds) / totalAds * 100, 0)}</b></p>
+        <p>CPA moyen : <b>${fmtMoney(totalSales > 0 ? totalAds / totalSales : 0)}</b></p>
+      </div>
+      ` : ''}
+
+      <div style="margin-top: 60px; padding-top: 20px; border-top: 1px solid #ddd; text-align: center; color: #807060; font-size: 11px; font-family: 'Courier New', monospace; letter-spacing: 1.5px;">
+        Les Secrets De Geoffrey · Dashboard Webinaires
+      </div>
+    </div>
+  `;
+
+  document.getElementById('reportPreview').innerHTML = html;
+
+  // Generate PDF
+  setTimeout(() => {
+    const el = document.getElementById('reportContent');
+    html2pdf().from(el).set({
+      margin: 10,
+      filename: `LSG-Rapport-${period}-${now.toISOString().split('T')[0]}.pdf`,
+      image: { type: 'jpeg', quality: 0.95 },
+      html2canvas: { scale: 2, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+    }).save();
+    showToast('Rapport PDF en cours de téléchargement');
+  }, 300);
+}
+
+// ============================================
+// INIT
+// ============================================
+async function bootApp() {
+  const loader = document.getElementById('appLoader');
+  loader.classList.remove('hidden');
+  try {
+    await reloadData();
+    refreshPage('dashboard');
+  } catch (e) {
+    console.error('Boot error:', e);
+    showErrorToast('Erreur de chargement initial');
+    // On affiche quand même le dashboard vide pour ne pas bloquer l'app
+    refreshPage('dashboard');
+  } finally {
+    loader.classList.add('hidden');
+  }
+}
+
+// Si l'utilisateur a déjà un cookie valide, on cache l'overlay et on boot direct
+if (isAuthenticated()) {
+  hideAuth();
+  bootApp();
+} else {
+  // Focus sur l'input password à l'ouverture
+  setTimeout(() => {
+    const pwd = document.getElementById('authPassword');
+    if (pwd) pwd.focus();
+  }, 100);
+}
+
+// Resize charts on window resize
+window.addEventListener('resize', () => {
+  Object.values(charts).forEach(c => c && c.resize && c.resize());
+});
+</script>
+</body>
+</html>
