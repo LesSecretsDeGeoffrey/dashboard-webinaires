@@ -1118,6 +1118,10 @@ tr.clickable { cursor: pointer; }
       <li><a data-page="dm"><span class="nav-icon">💬</span><span>DM Tracking</span></a></li>
       <li><a data-page="objections"><span class="nav-icon">❓</span><span>Objections</span></a></li>
       <li><a data-page="rapports"><span class="nav-icon">📄</span><span>Rapports</span></a></li>
+      <li><a data-page="dropoff"><span class="nav-icon">📉</span><span>Drop-off</span></a></li>
+      <li><a data-page="fans"><span class="nav-icon">🔥</span><span>Super Warm</span></a></li>
+      <li><a data-page="faq"><span class="nav-icon">❔</span><span>FAQ Chat</span></a></li>
+      <li><a data-page="temoignages"><span class="nav-icon">💎</span><span>Témoignages</span></a></li>
     </ul>
     <div class="sidebar-footer">
       <button class="btn-reset" id="btnReset" title="Vider tout le dashboard">
@@ -1363,6 +1367,135 @@ tr.clickable { cursor: pointer; }
         </div>
         <div id="reportPreview"></div>
       </div>
+    </section>
+
+    <!-- ===== DROP-OFF ===== -->
+    <section class="page" id="page-dropoff">
+      <div class="page-header">
+        <div>
+          <div class="overline">Heat map de présence</div>
+          <h1 class="page-title">Drop-off du live</h1>
+          <div class="page-subtitle">Identifie les minutes où tu perds le plus d'audience</div>
+        </div>
+      </div>
+      <div class="roi-card mb-2">
+        <div class="form-grid">
+          <div class="form-field">
+            <label class="form-label">Webinaire</label>
+            <select class="form-select" id="dropoffWebinaireSelect"></select>
+          </div>
+        </div>
+      </div>
+      <div class="chart-card mb-2">
+        <div class="chart-header">
+          <h3 class="chart-title">Présence minute par minute</h3>
+          <span class="overline" id="dropoffPicLabel"></span>
+        </div>
+        <div class="chart-wrap"><canvas id="chartDropoff"></canvas></div>
+      </div>
+      <div class="roi-card">
+        <h3 class="chart-title mb-2">Top 5 moments où tu perds le plus de monde</h3>
+        <table>
+          <thead>
+            <tr><th>Minute</th><th>Avant</th><th>Après</th><th>Perte</th><th>% du pic</th></tr>
+          </thead>
+          <tbody id="dropoffTopTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== SUPER WARM LEADS ===== -->
+    <section class="page" id="page-fans">
+      <div class="page-header">
+        <div>
+          <div class="overline">Doublons multi-lives</div>
+          <h1 class="page-title">Super Warm Leads</h1>
+          <div class="page-subtitle">Les fans absolus qui reviennent à plusieurs lives</div>
+        </div>
+      </div>
+      <div class="kpi-grid mb-2" id="fansKpis"></div>
+      <div class="roi-card mb-2">
+        <div class="form-grid">
+          <div class="form-field">
+            <label class="form-label">Filtre par niveau</label>
+            <select class="form-select" id="fansFilter">
+              <option value="all">Tous</option>
+              <option value="VERY_HOT">VERY_HOT (5+ inscriptions, 3+ présences)</option>
+              <option value="HOT">HOT (3+ inscriptions, 2+ présences)</option>
+              <option value="WARM">WARM (2+ inscriptions)</option>
+              <option value="GHOST">GHOST (s'inscrit, ne vient jamais)</option>
+              <option value="CLIENT">CLIENT (déjà acheté)</option>
+            </select>
+          </div>
+          <div class="form-field">
+            <label class="form-label">Recherche</label>
+            <input type="text" class="form-input" id="fansSearch" placeholder="Prénom ou email">
+          </div>
+        </div>
+      </div>
+      <div class="roi-card">
+        <table>
+          <thead>
+            <tr>
+              <th>Niveau</th>
+              <th>Prénom</th>
+              <th>Email</th>
+              <th>Inscriptions</th>
+              <th>Présences</th>
+              <th>Minutes</th>
+              <th>Sources</th>
+              <th>Dernière inscription</th>
+            </tr>
+          </thead>
+          <tbody id="fansTable"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ===== FAQ ===== -->
+    <section class="page" id="page-faq">
+      <div class="page-header">
+        <div>
+          <div class="overline">Questions du chat agrégées</div>
+          <h1 class="page-title">FAQ extraite</h1>
+          <div class="page-subtitle">Les vraies douleurs et questions techniques de ton audience</div>
+        </div>
+      </div>
+      <div class="roi-card mb-2">
+        <div class="form-grid">
+          <div class="form-field">
+            <label class="form-label">Webinaire</label>
+            <select class="form-select" id="faqWebinaireSelect"></select>
+          </div>
+        </div>
+      </div>
+      <div id="faqContainer"></div>
+    </section>
+
+    <!-- ===== TÉMOIGNAGES ===== -->
+    <section class="page" id="page-temoignages">
+      <div class="page-header">
+        <div>
+          <div class="overline">Social proof archivé</div>
+          <h1 class="page-title">Témoignages</h1>
+          <div class="page-subtitle">Pépites prêtes à utiliser dans pages de vente, pitchs et ads</div>
+        </div>
+      </div>
+      <div class="roi-card mb-2">
+        <div class="form-grid">
+          <div class="form-field">
+            <label class="form-label">Filtre par type</label>
+            <select class="form-select" id="temoFilter">
+              <option value="all">Tous</option>
+              <option value="RESULTAT">RÉSULTAT (avant/après)</option>
+              <option value="AVANT_APRES">AVANT/APRÈS</option>
+              <option value="GARANTIE">GARANTIE</option>
+              <option value="TEXTE">TEXTE</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div id="temoContainer"></div>
     </section>
 
   </main>
@@ -1924,6 +2057,10 @@ function refreshPage(page) {
     case 'dm': renderDM(); break;
     case 'objections': renderObjections(); break;
     case 'rapports': renderRapports(); break;
+    case 'dropoff': renderDropoff(); break;
+    case 'fans': renderFans(); break;
+    case 'faq': renderFaq(); break;
+    case 'temoignages': renderTemoignages(); break;
   }
 }
 
@@ -3073,6 +3210,256 @@ function generateReport() {
     }).save();
     showToast('Rapport PDF en cours de téléchargement');
   }, 300);
+}
+
+// ============================================
+// INSIGHTS V2 — Drop-off, Super Warm, FAQ, Témoignages
+// ============================================
+
+async function sb_fetchAll(table, query = '') {
+  const url = `${supabase.url}/rest/v1/${table}${query}`;
+  const res = await fetch(url, { headers: sbHeaders() });
+  if (!res.ok) throw new Error(`Supabase ${table}: ${res.status}`);
+  return res.json();
+}
+
+// ───── DROP-OFF ─────
+async function renderDropoff() {
+  const ws = sortedWebinaires();
+  const sel = document.getElementById('dropoffWebinaireSelect');
+  sel.innerHTML = ws.map(w => `<option value="${w.id}">${fmtDate(w.date)} · ${w.titre}</option>`).join('');
+  sel.onchange = () => renderDropoffChart(sel.value);
+  if (ws.length) {
+    sel.value = ws[ws.length - 1].id;
+    renderDropoffChart(sel.value);
+  } else {
+    document.getElementById('dropoffPicLabel').textContent = 'Aucun webinaire';
+  }
+}
+
+async function renderDropoffChart(webinaireId) {
+  try {
+    const points = await sb_fetchAll('dropoff_points', `?webinaire_id=eq.${webinaireId}&order=minute.asc`);
+    if (!points.length) {
+      document.getElementById('dropoffPicLabel').textContent = 'Aucune data (lance insights.py --dropoff)';
+      destroyChart('dropoff');
+      document.getElementById('dropoffTopTable').innerHTML = '<tr><td colspan="5" class="td-muted">Pas de données. Lance <code>python3 insights.py --dropoff --webinar &lt;ID&gt;</code></td></tr>';
+      return;
+    }
+    const pic = Math.max(...points.map(p => p.presents_count));
+    const picMin = points.find(p => p.presents_count === pic).minute;
+    document.getElementById('dropoffPicLabel').textContent = `Pic ${pic} pers à ${picMin} min`;
+
+    destroyChart('dropoff');
+    const ctx = document.getElementById('chartDropoff').getContext('2d');
+    charts.dropoff = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: points.map(p => p.minute + ' min'),
+        datasets: [{
+          label: 'Présents',
+          data: points.map(p => p.presents_count),
+          borderColor: '#C8A04A',
+          backgroundColor: goldGradient(ctx, 0.3, 0),
+          fill: true,
+          tension: 0.3,
+          pointRadius: points.map(p => p.is_drop_critical ? 6 : 0),
+          pointBackgroundColor: points.map(p => p.is_drop_critical ? '#E08A8A' : '#C8A04A'),
+          pointBorderColor: '#1A1410',
+          borderWidth: 2
+        }]
+      },
+      options: chartOptions({ unit: ' pers' })
+    });
+
+    // Top 5 drops
+    const drops = [];
+    for (let i = 1; i < points.length; i++) {
+      const delta = points[i-1].presents_count - points[i].presents_count;
+      if (delta > 0 && points[i].is_drop_critical) {
+        drops.push({
+          minute: points[i].minute,
+          before: points[i-1].presents_count,
+          after: points[i].presents_count,
+          loss: delta,
+          pctPic: (delta / pic * 100).toFixed(1)
+        });
+      }
+    }
+    drops.sort((a, b) => b.loss - a.loss);
+    const tbody = document.getElementById('dropoffTopTable');
+    tbody.innerHTML = drops.slice(0, 5).map(d => `
+      <tr>
+        <td class="td-bold">${d.minute} min</td>
+        <td class="td-mono">${d.before}</td>
+        <td class="td-mono">${d.after}</td>
+        <td><span class="kpi-trend trend-down">▼ ${d.loss} pers</span></td>
+        <td class="td-mono">${d.pctPic} %</td>
+      </tr>
+    `).join('') || '<tr><td colspan="5" class="td-muted">Aucun drop critique détecté</td></tr>';
+  } catch (e) {
+    console.error(e);
+    showErrorToast('Erreur drop-off');
+  }
+}
+
+// ───── SUPER WARM LEADS ─────
+let fansData = [];
+async function renderFans() {
+  try {
+    fansData = await sb_fetchAll('super_warm_leads', '?order=nb_inscriptions.desc');
+    renderFansKpis();
+    document.getElementById('fansFilter').onchange = renderFansTable;
+    document.getElementById('fansSearch').oninput = renderFansTable;
+    renderFansTable();
+  } catch (e) {
+    console.error(e);
+    showErrorToast('Erreur super warm');
+  }
+}
+
+function renderFansKpis() {
+  const counts = { VERY_HOT: 0, HOT: 0, WARM: 0, GHOST: 0, CLIENT: 0 };
+  fansData.forEach(f => { counts[f.niveau] = (counts[f.niveau] || 0) + 1; });
+  const grid = document.getElementById('fansKpis');
+  grid.innerHTML = `
+    ${kpiCard('🔥', 'VERY_HOT', counts.VERY_HOT, null)}
+    ${kpiCard('💪', 'HOT', counts.HOT, null)}
+    ${kpiCard('🌡️', 'WARM', counts.WARM, null)}
+    ${kpiCard('👻', 'GHOST', counts.GHOST, null)}
+  `;
+}
+
+function renderFansTable() {
+  const filter = document.getElementById('fansFilter').value;
+  const search = (document.getElementById('fansSearch').value || '').toLowerCase();
+  let rows = fansData;
+  if (filter !== 'all') rows = rows.filter(r => r.niveau === filter);
+  if (search) rows = rows.filter(r => (r.prenom || '').toLowerCase().includes(search) || (r.email || '').toLowerCase().includes(search));
+  rows = rows.slice(0, 200);
+  const tbody = document.getElementById('fansTable');
+  if (!rows.length) {
+    tbody.innerHTML = '<tr><td colspan="8" class="td-muted">Aucun résultat. Lance <code>python3 insights.py --super-warm</code></td></tr>';
+    return;
+  }
+  const niveauColor = {
+    VERY_HOT: 'kpi-trend trend-up',
+    HOT: 'kpi-trend trend-up',
+    WARM: 'kpi-trend trend-neutral',
+    GHOST: 'kpi-trend trend-down',
+    CLIENT: 'kpi-trend trend-up'
+  };
+  tbody.innerHTML = rows.map(r => `
+    <tr>
+      <td><span class="${niveauColor[r.niveau] || ''}">${r.niveau}</span></td>
+      <td class="td-bold">${r.prenom || '—'}</td>
+      <td class="td-mono">${r.email}</td>
+      <td class="td-mono">${r.nb_inscriptions}</td>
+      <td class="td-mono">${r.nb_presences}</td>
+      <td class="td-mono">${r.total_minutes} min</td>
+      <td class="td-mono">${(r.utm_sources || []).join(', ') || '—'}</td>
+      <td class="td-mono">${r.derniere_inscription || '—'}</td>
+    </tr>
+  `).join('');
+}
+
+// ───── FAQ EXTRAITE ─────
+async function renderFaq() {
+  const ws = sortedWebinaires();
+  const sel = document.getElementById('faqWebinaireSelect');
+  sel.innerHTML = '<option value="all">Tous les webinaires</option>' + ws.map(w => `<option value="${w.id}">${fmtDate(w.date)} · ${w.titre}</option>`).join('');
+  sel.onchange = () => renderFaqContent(sel.value);
+  renderFaqContent('all');
+}
+
+const THEME_ICONS = {
+  cuisson: '🔥', meringue: '🥚', macaronage: '🥄', croutage: '⏱️',
+  ganache: '🍫', materiel: '🔧', recette: '📝', conservation: '❄️',
+  vente: '💰', autre: '❓'
+};
+
+async function renderFaqContent(webinaireId) {
+  try {
+    let q = '?order=count.desc';
+    if (webinaireId !== 'all') q = `?webinaire_id=eq.${webinaireId}&order=count.desc`;
+    const items = await sb_fetchAll('faq_extraite', q);
+    const container = document.getElementById('faqContainer');
+    if (!items.length) {
+      container.innerHTML = '<div class="roi-card td-muted">Pas de FAQ extraite. Lance <code>python3 insights.py --faq --chat &lt;path&gt; --webinar &lt;ID&gt;</code></div>';
+      return;
+    }
+    // Group by theme (si "all", on aggregate les counts par thème)
+    const byTheme = {};
+    items.forEach(item => {
+      const t = item.theme || 'autre';
+      if (!byTheme[t]) byTheme[t] = { count: 0, exemples: new Set() };
+      byTheme[t].count += item.count;
+      (item.exemples || []).forEach(ex => byTheme[t].exemples.add(ex));
+    });
+    const themes = Object.entries(byTheme).sort((a, b) => b[1].count - a[1].count);
+    container.innerHTML = themes.map(([theme, data]) => `
+      <div class="roi-card mb-2">
+        <h3 class="chart-title" style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:24px;">${THEME_ICONS[theme] || '❓'}</span>
+          <span style="text-transform:uppercase;">${theme}</span>
+          <span class="kpi-trend trend-up" style="margin-left:auto;">${data.count} questions</span>
+        </h3>
+        <div style="margin-top:14px;">
+          ${Array.from(data.exemples).slice(0, 8).map(ex => `<div style="padding:8px 12px;margin-bottom:6px;background:rgba(200,160,74,0.05);border-left:2px solid rgba(200,160,74,0.4);border-radius:4px;font-size:13px;line-height:1.5;color:rgba(253,248,240,0.8);">« ${ex} »</div>`).join('')}
+        </div>
+      </div>
+    `).join('');
+  } catch (e) {
+    console.error(e);
+    showErrorToast('Erreur FAQ');
+  }
+}
+
+// ───── TÉMOIGNAGES ─────
+let temoData = [];
+async function renderTemoignages() {
+  try {
+    temoData = await sb_fetchAll('temoignages', '?order=created_at.desc');
+    document.getElementById('temoFilter').onchange = renderTemoCards;
+    renderTemoCards();
+  } catch (e) {
+    console.error(e);
+    showErrorToast('Erreur témoignages');
+  }
+}
+
+const TEMO_BADGES = {
+  RESULTAT: { color: 'trend-up', label: '🌟 Résultat' },
+  AVANT_APRES: { color: 'trend-up', label: '📈 Avant/Après' },
+  GARANTIE: { color: 'trend-neutral', label: '🛡️ Garantie' },
+  TEXTE: { color: 'trend-neutral', label: '💬 Témoignage' }
+};
+
+function renderTemoCards() {
+  const filter = document.getElementById('temoFilter').value;
+  let rows = temoData;
+  if (filter !== 'all') rows = rows.filter(t => t.type_temoignage === filter);
+  const container = document.getElementById('temoContainer');
+  if (!rows.length) {
+    container.innerHTML = '<div class="roi-card td-muted">Pas de témoignages. Lance <code>python3 insights.py --temoignages --chat &lt;path&gt; --webinar &lt;ID&gt;</code></div>';
+    return;
+  }
+  container.innerHTML = rows.map(t => {
+    const b = TEMO_BADGES[t.type_temoignage] || TEMO_BADGES.TEXTE;
+    return `
+      <div class="roi-card mb-2" style="border-left:3px solid #C8A04A;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+          <div>
+            <strong style="font-size:16px;color:#FDF8F0;">${t.prenom || '—'}</strong>
+            <span class="td-mono td-muted" style="margin-left:10px;font-size:12px;">${t.email || ''}</span>
+          </div>
+          <span class="kpi-trend ${b.color}">${b.label}</span>
+        </div>
+        <div style="font-size:14px;line-height:1.6;color:rgba(253,248,240,0.92);font-style:italic;">« ${t.texte} »</div>
+        ${t.date_webinaire ? `<div class="td-mono td-muted" style="margin-top:10px;font-size:11px;">Live du ${fmtDate(t.date_webinaire)}</div>` : ''}
+      </div>
+    `;
+  }).join('');
 }
 
 // ============================================
