@@ -490,6 +490,35 @@ tr.clickable { cursor: pointer; }
   border-color: var(--or-clair);
 }
 
+.dash-scope-select {
+  background: rgba(200, 160, 74, 0.08);
+  border: 1px solid var(--or);
+  color: var(--creme);
+  padding: 10px 16px;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 14px;
+  cursor: pointer;
+  min-width: 280px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%23C8A04A' d='M6 8L0 0h12z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+}
+
+.dash-scope-select:hover, .dash-scope-select:focus {
+  background-color: rgba(200, 160, 74, 0.15);
+  border-color: var(--or-clair);
+  outline: none;
+}
+
+.dash-scope-select option {
+  background: var(--sombre);
+  color: var(--creme);
+}
+
 .btn-danger {
   background: transparent;
   border: 1px solid var(--rouge);
@@ -1139,7 +1168,13 @@ tr.clickable { cursor: pointer; }
         <div>
           <div class="overline">Vue d'ensemble</div>
           <h1 class="page-title">Dashboard</h1>
-          <div class="page-subtitle">Performance globale de tes webinaires</div>
+          <div class="page-subtitle" id="dashSubtitle">Performance globale de tes webinaires</div>
+        </div>
+        <div class="flex-row">
+          <label for="dashScopeSelect" class="overline" style="margin-right: 12px; align-self: center;">Vue</label>
+          <select id="dashScopeSelect" class="dash-scope-select" onchange="onDashScopeChange()">
+            <option value="all">Tous les webinaires (moyennes)</option>
+          </select>
         </div>
       </div>
 
@@ -2088,10 +2123,58 @@ function destroyChart(key) {
 // ============================================
 // DASHBOARD
 // ============================================
-function renderDashboard() {
-  const ws = sortedWebinaires();
+// Scope du dashboard : 'all' = tous les webinaires (moyennes), ou un ID de webinaire
+let dashScope = 'all';
 
-  // KPIs
+function populateDashScopeSelect() {
+  const sel = document.getElementById('dashScopeSelect');
+  if (!sel) return;
+  const ws = [...data.webinaires].sort((a, b) => b.date.localeCompare(a.date)); // plus récent en premier
+  // Conserver la valeur sélectionnée actuelle si elle existe encore
+  const currentVal = sel.value || 'all';
+  sel.innerHTML = '<option value="all">Tous les webinaires (moyennes)</option>' +
+    ws.map(w => `<option value="${w.id}">${fmtDate(w.date)} · ${escapeHtml(w.titre || 'Sans titre')}</option>`).join('');
+  // Restaurer la sélection si toujours valide
+  const stillValid = currentVal === 'all' || ws.some(w => w.id === currentVal);
+  sel.value = stillValid ? currentVal : 'all';
+  if (!stillValid) dashScope = 'all';
+}
+
+function onDashScopeChange() {
+  const sel = document.getElementById('dashScopeSelect');
+  dashScope = sel.value;
+  renderDashboard();
+}
+
+function escapeHtml(s) {
+  return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+function renderDashboard() {
+  // Toujours repeupler le sélecteur pour refléter les webinaires actuels
+  populateDashScopeSelect();
+
+  const allWs = sortedWebinaires();
+  const isAll = dashScope === 'all';
+  const selected = isAll ? null : allWs.find(w => w.id === dashScope);
+
+  // Update subtitle
+  const subtitle = document.getElementById('dashSubtitle');
+  if (subtitle) {
+    subtitle.textContent = isAll
+      ? 'Performance globale de tes webinaires'
+      : `Webinaire du ${fmtDate(selected.date)} · ${selected.titre || 'Sans titre'}`;
+  }
+
+  if (isAll) {
+    renderDashboardAll(allWs);
+  } else {
+    renderDashboardSingle(selected, allWs);
+  }
+}
+
+function renderDashboardAll(ws) {
+  // KPIs moyennes / cumul
   let avgShowup = 0, avgConv = 0, totalCA = 0, totalSales = 0;
   ws.forEach(w => {
     avgShowup += showup(w);
@@ -2119,14 +2202,46 @@ function renderDashboard() {
     ${kpiCard('🎯', 'Prix moyen', fmtMoney(avgPrice), null)}
   `;
 
-  // Charts
+  // Charts (vue série temporelle complète)
   renderConversionChart(ws);
   renderCAChart(ws);
   renderSourcesChart(ws);
   renderShowupChart(ws);
 
-  // Last webinaire
+  // Tableau dernier webinaire vs moyenne historique
   renderLastWebinaire(ws);
+}
+
+function renderDashboardSingle(w, allWs) {
+  // KPIs : valeurs pour CE webinaire vs moyenne des autres
+  const others = allWs.filter(x => x.id !== w.id);
+  const avgShowupOthers = others.length ? others.reduce((s, x) => s + showup(x), 0) / others.length : 0;
+  const avgConvOthers = others.length ? others.reduce((s, x) => s + conversion(x), 0) / others.length : 0;
+
+  const wShowup = showup(w);
+  const wConv = conversion(w);
+  const wCA = w.ventes_montant_total || 0;
+  const wPrice = prixMoyen(w);
+
+  // Trend = écart vs moyenne historique
+  const trendShowup = others.length ? wShowup - avgShowupOthers : 0;
+  const trendConv = others.length ? wConv - avgConvOthers : 0;
+
+  document.getElementById('kpiGrid').innerHTML = `
+    ${kpiCard('📊', 'Show-up', fmtPct(wShowup), others.length ? trendShowup : null)}
+    ${kpiCard('💰', 'Conversion', fmtPct(wConv), others.length ? trendConv : null)}
+    ${kpiCard('💎', 'CA', fmtMoney(wCA), null)}
+    ${kpiCard('🎯', 'Prix moyen', fmtMoney(wPrice), null)}
+  `;
+
+  // Charts : focus sur ce webinaire dans le temps (highlight)
+  renderConversionChart(allWs, w.id);
+  renderCAChart(allWs, w.id);
+  renderSourcesChartSingle(w);
+  renderShowupChart(allWs, w.id);
+
+  // Tableau : ce webinaire vs moyenne des autres
+  renderSingleWebinaire(w, others);
 }
 
 function kpiCard(icon, label, value, trend, unit = '') {
@@ -2148,9 +2263,11 @@ function kpiCard(icon, label, value, trend, unit = '') {
   `;
 }
 
-function renderConversionChart(ws) {
+function renderConversionChart(ws, highlightId) {
   destroyChart('conversion');
   const ctx = document.getElementById('chartConversion').getContext('2d');
+  const pointRadii = ws.map(w => highlightId && w.id === highlightId ? 10 : 5);
+  const pointColors = ws.map(w => highlightId && w.id === highlightId ? '#C8A04A' : '#E0BE6B');
   charts.conversion = new Chart(ctx, {
     type: 'line',
     data: {
@@ -2162,9 +2279,9 @@ function renderConversionChart(ws) {
         backgroundColor: goldGradient(ctx, 0.3, 0),
         fill: true,
         tension: 0.35,
-        pointBackgroundColor: '#E0BE6B',
+        pointBackgroundColor: pointColors,
         pointBorderColor: '#1A1410',
-        pointRadius: 5,
+        pointRadius: pointRadii,
         pointHoverRadius: 7,
         borderWidth: 2.5
       }]
@@ -2173,10 +2290,11 @@ function renderConversionChart(ws) {
   });
 }
 
-function renderCAChart(ws) {
+function renderCAChart(ws, highlightId) {
   destroyChart('ca');
   const ctx = document.getElementById('chartCA').getContext('2d');
   const avg = ws.length ? ws.reduce((s, w) => s + w.ventes_montant_total, 0) / ws.length : 0;
+  const bgColors = ws.map(w => highlightId && w.id === highlightId ? '#C8A04A' : 'rgba(200, 160, 74, 0.4)');
   charts.ca = new Chart(ctx, {
     type: 'bar',
     data: {
@@ -2184,7 +2302,7 @@ function renderCAChart(ws) {
       datasets: [{
         label: 'CA €',
         data: ws.map(w => w.ventes_montant_total),
-        backgroundColor: 'rgba(200, 160, 74, 0.7)',
+        backgroundColor: bgColors,
         borderColor: '#C8A04A',
         borderWidth: 1,
         borderRadius: 6
@@ -2234,9 +2352,11 @@ function renderSourcesChart(ws) {
   });
 }
 
-function renderShowupChart(ws) {
+function renderShowupChart(ws, highlightId) {
   destroyChart('showup');
   const ctx = document.getElementById('chartShowup').getContext('2d');
+  const pointRadii = ws.map(w => highlightId && w.id === highlightId ? 10 : 5);
+  const pointColors = ws.map(w => highlightId && w.id === highlightId ? '#E0BE6B' : '#C8A04A');
   charts.showup = new Chart(ctx, {
     type: 'line',
     data: {
@@ -2248,14 +2368,72 @@ function renderShowupChart(ws) {
         backgroundColor: goldGradient(ctx, 0.2, 0),
         fill: true,
         tension: 0.35,
-        pointBackgroundColor: '#C8A04A',
+        pointBackgroundColor: pointColors,
         pointBorderColor: '#1A1410',
-        pointRadius: 5,
+        pointRadius: pointRadii,
         borderWidth: 2.5
       }]
     },
     options: chartOptions({ unit: '%' })
   });
+}
+
+function renderSourcesChartSingle(w) {
+  destroyChart('sources');
+  const ctx = document.getElementById('chartSources').getContext('2d');
+  charts.sources = new Chart(ctx, {
+    type: 'doughnut',
+    data: {
+      labels: ['Ads', 'Organique', 'Email'],
+      datasets: [{
+        data: [w.inscrits_ads || 0, w.inscrits_organique || 0, w.inscrits_email || 0],
+        backgroundColor: ['#C8A04A', '#E0BE6B', '#8a6f2b'],
+        borderColor: '#1A1410',
+        borderWidth: 2
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: 'right', labels: { color: '#FDF8F0', padding: 14, font: { size: 12 } } }
+      },
+      cutout: '60%'
+    }
+  });
+}
+
+function renderSingleWebinaire(w, others) {
+  const container = document.getElementById('lastWebinaireContent');
+  const overline = document.getElementById('lastWebinaireOverline');
+  overline.textContent = `${fmtDate(w.date)} · pitch ${w.pitch_version || '—'}`;
+
+  // Update title du tableau si présent (h3.table-title juste avant)
+  const tableTitle = container.parentElement.querySelector('.table-title');
+  if (tableTitle) tableTitle.textContent = others.length ? 'Ce webinaire vs moyenne historique' : 'Détails du webinaire';
+
+  const avgShowupOthers = others.length ? others.reduce((s, x) => s + showup(x), 0) / others.length : 0;
+  const avgConvOthers = others.length ? others.reduce((s, x) => s + conversion(x), 0) / others.length : 0;
+  const avgCAOthers = others.length ? others.reduce((s, x) => s + x.ventes_montant_total, 0) / others.length : 0;
+  const avgInscritsOthers = others.length ? others.reduce((s, x) => s + x.inscrits_total, 0) / others.length : 0;
+  const avgPresentsOthers = others.length ? others.reduce((s, x) => s + x.presents_pitch, 0) / others.length : 0;
+  const avgVentesOthers = others.length ? others.reduce((s, x) => s + x.ventes_count, 0) / others.length : 0;
+
+  container.innerHTML = `
+    <table>
+      <thead>
+        <tr><th>Métrique</th><th>Ce webinaire</th><th>Moyenne ${others.length ? 'historique' : '(N/A)'}</th><th>Écart</th></tr>
+      </thead>
+      <tbody>
+        ${rowMetric('Inscrits', w.inscrits_total, avgInscritsOthers)}
+        ${rowMetric('Show-up %', showup(w), avgShowupOthers, '%')}
+        ${rowMetric('Présents au pitch', w.presents_pitch, avgPresentsOthers)}
+        ${rowMetric('Ventes', w.ventes_count, avgVentesOthers)}
+        ${rowMetric('Conversion %', conversion(w), avgConvOthers, '%')}
+        ${rowMetric('CA €', w.ventes_montant_total, avgCAOthers, '€')}
+      </tbody>
+    </table>
+  `;
 }
 
 function chartOptions(opt = {}) {
@@ -2285,6 +2463,9 @@ function chartOptions(opt = {}) {
 
 function renderLastWebinaire(ws) {
   const container = document.getElementById('lastWebinaireContent');
+  // Restaurer le titre de la table
+  const tableTitle = container.parentElement.querySelector('.table-title');
+  if (tableTitle) tableTitle.textContent = 'Dernier webinaire';
   if (ws.length === 0) {
     container.innerHTML = `<div class="empty"><div class="empty-icon">📊</div><div class="empty-title">Aucun webinaire</div><div class="empty-sub">Ajoute ton premier webinaire pour voir les stats</div></div>`;
     return;
