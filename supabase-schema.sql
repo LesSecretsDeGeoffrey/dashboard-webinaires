@@ -27,12 +27,31 @@ create table if not exists public.webinaires (
   paiements_3x int default 0,
   paiements_4x_paypal int default 0,
   ads_depense int default 0,
+  -- Funnel Liberty (ajoutées 08/06) :
+  vues int default 0,              -- impressions Meta
+  clics int default 0,             -- clics sur le lien (link clicks)
+  presents_debut int default 0,    -- présence début 3-5 min (sinon = pic présents)
+  presents_whatsapp int default 0, -- présents sur WhatsApp
+  messages_chat int default 0,     -- nombre de messages dans le chat
+  clics_lien int default 0,        -- clics sur le lien pendant le live
+  replay_vues int default 0,       -- vues du replay (monte sur plusieurs jours)
   notes_generales text default '',
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
 
 create index if not exists idx_webinaires_date on public.webinaires(date desc);
+
+-- ===== 1bis. MIGRATION FUNNEL LIBERTY (08/06) =====
+-- Idempotent : ajoute les 7 colonnes funnel à une table déjà créée.
+-- (le bloc create table ci-dessus ne s'applique PAS à une table existante)
+alter table public.webinaires add column if not exists vues int default 0;
+alter table public.webinaires add column if not exists clics int default 0;
+alter table public.webinaires add column if not exists presents_debut int default 0;
+alter table public.webinaires add column if not exists presents_whatsapp int default 0;
+alter table public.webinaires add column if not exists messages_chat int default 0;
+alter table public.webinaires add column if not exists clics_lien int default 0;
+alter table public.webinaires add column if not exists replay_vues int default 0;
 
 -- ===== 2. TABLE OBJECTIONS =====
 create table if not exists public.objections (
