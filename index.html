@@ -1672,22 +1672,14 @@ tr.clickable { cursor: pointer; }
               <input type="number" class="form-input" id="f_presents_debut" min="0" value="0">
             </div>
           </div>
-          <div class="form-grid-4 mt-2">
-            <div class="form-field">
-              <label class="form-label">Présents WhatsApp</label>
-              <input type="number" class="form-input" id="f_presents_whatsapp" min="0" value="0">
-            </div>
-            <div class="form-field">
-              <label class="form-label">Messages chat</label>
-              <input type="number" class="form-input" id="f_messages_chat" min="0" value="0">
-            </div>
+          <div class="form-grid-3 mt-2">
             <div class="form-field">
               <label class="form-label">Clics lien (live)</label>
               <input type="number" class="form-input" id="f_clics_lien" min="0" value="0">
             </div>
             <div class="form-field">
-              <label class="form-label">Vues replay</label>
-              <input type="number" class="form-input" id="f_replay_vues" min="0" value="0">
+              <label class="form-label">Taux moyen visionnage live (%)</label>
+              <input type="number" class="form-input" id="f_tx_visionnage_live" min="0" max="100" value="0">
             </div>
           </div>
         </div>
@@ -1902,10 +1894,8 @@ function pickWebinaireFields(w) {
     vues: +w.vues || 0,
     clics: +w.clics || 0,
     presents_debut: +w.presents_debut || 0,
-    presents_whatsapp: +w.presents_whatsapp || 0,
-    messages_chat: +w.messages_chat || 0,
     clics_lien: +w.clics_lien || 0,
-    replay_vues: +w.replay_vues || 0,
+    tx_visionnage_live: +w.tx_visionnage_live || 0,
     notes_generales: w.notes_generales || ''
   };
 }
@@ -2708,10 +2698,8 @@ function editWebinaire(id) {
   document.getElementById('f_vues').value = w.vues || 0;
   document.getElementById('f_clics').value = w.clics || 0;
   document.getElementById('f_presents_debut').value = w.presents_debut || 0;
-  document.getElementById('f_presents_whatsapp').value = w.presents_whatsapp || 0;
-  document.getElementById('f_messages_chat').value = w.messages_chat || 0;
   document.getElementById('f_clics_lien').value = w.clics_lien || 0;
-  document.getElementById('f_replay_vues').value = w.replay_vues || 0;
+  document.getElementById('f_tx_visionnage_live').value = w.tx_visionnage_live || 0;
   document.getElementById('f_notes_generales').value = w.notes_generales || '';
 
   tempObjections = [...(w.objections || [])];
@@ -2756,10 +2744,8 @@ async function saveWebinaire() {
     vues: +document.getElementById('f_vues').value || 0,
     clics: +document.getElementById('f_clics').value || 0,
     presents_debut: +document.getElementById('f_presents_debut').value || 0,
-    presents_whatsapp: +document.getElementById('f_presents_whatsapp').value || 0,
-    messages_chat: +document.getElementById('f_messages_chat').value || 0,
     clics_lien: +document.getElementById('f_clics_lien').value || 0,
-    replay_vues: +document.getElementById('f_replay_vues').value || 0,
+    tx_visionnage_live: +document.getElementById('f_tx_visionnage_live').value || 0,
     objections: tempObjections.filter(o => o.texte && o.texte.trim()),
     dm_prospects: tempDmProspects.filter(p => p.prenom && p.prenom.trim()),
     notes_generales: document.getElementById('f_notes_generales').value
@@ -3104,10 +3090,7 @@ const F = {
   presDebut: w => { const p = w.presents_debut || w.presents_pic; return (w.inscrits_total > 0 && p > 0) ? (p / w.inscrits_total * 100) : null; },
   presOffre: w => { const pic = w.presents_pic, pi = w.presents_pitch; return (pic > 0 && pi > 0 && pic !== pi) ? (pi / pic * 100) : null; },
   coutVente: w => (w.ventes_count > 0 && w.ads_depense > 0) ? (w.ads_depense / w.ventes_count) : null,
-  clicLienPct: w => { const b = w.presents_pic || w.presents_pitch; return (w.clics_lien > 0 && b > 0) ? (w.clics_lien / b * 100) : null; },
-  whatsappPct: w => { const b = w.presents_pic || w.presents_pitch; return (w.presents_whatsapp > 0 && b > 0) ? (w.presents_whatsapp / b * 100) : null; },
-  replayInsc: w => (w.replay_vues > 0 && w.inscrits_total > 0) ? (w.replay_vues / w.inscrits_total * 100) : null,
-  replayPres: w => { const b = w.presents_pitch || w.presents_pic; return (w.replay_vues > 0 && b > 0) ? (w.replay_vues / b * 100) : null; }
+  clicLienPct: w => { const b = w.presents_pic || w.presents_pitch; return (w.clics_lien > 0 && b > 0) ? (w.clics_lien / b * 100) : null; }
 };
 
 // Couleur selon le seuil : vert (atteint), rouge (sous l'objectif), neutre (pas de seuil / pas de donnée)
@@ -3133,32 +3116,28 @@ function renderFunnel() {
 
   const rows = [
     { group: 'Acquisition (pub Meta)' },
-    { label: 'Vues', seuil: '—', disp: w => I(w.vues), raw: () => null },
-    { label: 'Clics sur le lien', seuil: '—', disp: w => I(w.clics), raw: () => null },
-    { label: 'CTR', sub: 'clics ÷ vues', seuil: '≥ 1 %', disp: w => P(F.ctr(w)), raw: w => F.ctr(w), rule: { min: 1 } },
-    { label: 'Inscrits ads', seuil: '—', disp: w => I(w.inscrits_ads), raw: () => null },
-    { label: 'Inscrits total', seuil: '—', disp: w => I(w.inscrits_total), raw: () => null },
-    { label: 'Taux d\'optin', sub: 'inscrits ads ÷ clics', seuil: '≥ 30 %', disp: w => P(F.optin(w)), raw: w => F.optin(w), rule: { min: 30 } },
-    { label: 'Budget', seuil: '—', disp: w => M(w.ads_depense), raw: () => null },
-    { label: 'CPL', sub: 'budget ÷ inscrits ads', seuil: '4–10 €', disp: w => M2(F.cpl(w)), raw: w => F.cpl(w), rule: { max: 10 } },
-    { label: 'CPM', sub: 'budget ÷ vues × 1000', seuil: '—', disp: w => M2(F.cpm(w)), raw: () => null },
+    { label: 'Vues', disp: w => I(w.vues), raw: () => null },
+    { label: 'Clics sur le lien', disp: w => I(w.clics), raw: () => null },
+    { label: 'CTR', sub: 'clics ÷ vues', disp: w => P(F.ctr(w)), raw: w => F.ctr(w), rule: { min: 1 } },
+    { label: 'Inscrits ads', disp: w => I(w.inscrits_ads), raw: () => null },
+    { label: 'Inscrits total', disp: w => I(w.inscrits_total), raw: () => null },
+    { label: 'Taux d\'optin', sub: 'inscrits ads ÷ clics', disp: w => P(F.optin(w)), raw: w => F.optin(w), rule: { min: 30 } },
+    { label: 'Budget', disp: w => M(w.ads_depense), raw: () => null },
+    { label: 'CPL', sub: 'budget ÷ inscrits ads', disp: w => M2(F.cpl(w)), raw: w => F.cpl(w), rule: { max: 10 } },
+    { label: 'CPM', sub: 'budget ÷ vues × 1000', disp: w => M2(F.cpm(w)), raw: () => null },
     { group: 'Présence & engagement' },
-    { label: 'Présence début', sub: '3-5 min ÷ inscrits', seuil: '≥ 30 %', disp: w => P(F.presDebut(w)), raw: w => F.presDebut(w), rule: { min: 30 } },
-    { label: 'Présence à l\'offre', sub: '÷ pic présents', seuil: '≥ 60 %', disp: w => P(F.presOffre(w)), raw: w => F.presOffre(w), rule: { min: 60 } },
-    { label: 'Présents WhatsApp', seuil: '—', disp: w => { const p = F.whatsappPct(w); return w.presents_whatsapp > 0 ? I(w.presents_whatsapp) + (p !== null ? ' (' + fmtPct(p, 0) + ')' : '') : '—'; }, raw: () => null },
-    { label: 'Messages chat', seuil: '—', disp: w => I(w.messages_chat), raw: () => null },
-    { label: 'Clics sur le lien (live)', sub: '÷ présents', seuil: '10–20 %', disp: w => { const p = F.clicLienPct(w); return p === null ? '—' : fmtPct(p) + ' (' + fmt(w.clics_lien) + ')'; }, raw: w => F.clicLienPct(w), rule: { min: 10 } },
+    { label: 'Présence début', sub: '3-5 min ÷ inscrits', disp: w => P(F.presDebut(w)), raw: w => F.presDebut(w), rule: { min: 30 } },
+    { label: 'Présence à l\'offre', sub: '÷ pic présents', disp: w => P(F.presOffre(w)), raw: w => F.presOffre(w), rule: { min: 60 } },
+    { label: 'Taux moyen de visionnage du live', sub: '% du live regardé', disp: w => w.tx_visionnage_live > 0 ? fmtPct(w.tx_visionnage_live) : '—', raw: () => null },
+    { label: 'Clics sur le lien (live)', sub: '÷ présents', disp: w => { const p = F.clicLienPct(w); return p === null ? '—' : fmtPct(p) + ' (' + fmt(w.clics_lien) + ')'; }, raw: w => F.clicLienPct(w), rule: { min: 10 } },
     { group: 'Ventes' },
-    { label: 'Achats', seuil: '—', disp: w => I(w.ventes_count), raw: () => null },
-    { label: 'Montant ventes', seuil: '—', disp: w => M(w.ventes_montant_total), raw: () => null },
-    { label: 'Coût pub / vente', sub: 'budget ÷ achats', seuil: '< 497 €', disp: w => M(F.coutVente(w)), raw: w => F.coutVente(w), rule: { max: 497 } },
-    { label: 'Taux de conversion', sub: 'achats ÷ présents', seuil: '3–10 %', disp: w => w.presents_pitch > 0 ? fmtPct(conversion(w)) : '—', raw: w => w.presents_pitch > 0 ? conversion(w) : null, rule: { min: 3 } },
-    { group: 'Replay' },
-    { label: 'Vues replay', sub: '÷ inscrits', seuil: '≥ 10 %', disp: w => { const p = F.replayInsc(w); return p === null ? '—' : fmtPct(p) + ' (' + fmt(w.replay_vues) + ')'; }, raw: w => F.replayInsc(w), rule: { min: 10 } },
-    { label: 'Tx visionnage replay', sub: '÷ présents', seuil: '≥ 25 %', disp: w => P(F.replayPres(w)), raw: w => F.replayPres(w), rule: { min: 25 } }
+    { label: 'Achats', disp: w => I(w.ventes_count), raw: () => null },
+    { label: 'Montant ventes', disp: w => M(w.ventes_montant_total), raw: () => null },
+    { label: 'Coût pub / vente', sub: 'budget ÷ achats', disp: w => M(F.coutVente(w)), raw: w => F.coutVente(w), rule: { max: 497 } },
+    { label: 'Taux de conversion', sub: 'achats ÷ présents', disp: w => w.presents_pitch > 0 ? fmtPct(conversion(w)) : '—', raw: w => w.presents_pitch > 0 ? conversion(w) : null, rule: { min: 3 } }
   ];
 
-  const colspan = ws.length + 2;
+  const colspan = ws.length + 1;
   const body = rows.map(r => {
     if (r.group) return `<tr class="funnel-group"><td colspan="${colspan}">${r.group}</td></tr>`;
     const cells = ws.map(w => {
@@ -3166,7 +3145,7 @@ function renderFunnel() {
       return `<td class="td-mono ${cls}">${r.disp(w)}</td>`;
     }).join('');
     const sub = r.sub ? `<div class="funnel-sub">${r.sub}</div>` : '';
-    return `<tr><td class="td-bold">${r.label}${sub}</td><td class="funnel-seuil">${r.seuil || '—'}</td>${cells}</tr>`;
+    return `<tr><td class="td-bold">${r.label}${sub}</td>${cells}</tr>`;
   }).join('');
 
   container.innerHTML = `
@@ -3183,14 +3162,13 @@ function renderFunnel() {
         <table class="compare-table funnel-table">
           <thead><tr>
             <th>Métrique</th>
-            <th>Objectif</th>
             ${ws.map(w => `<th>${escapeHtml(w.titre || w.pitch_version || '—')}<br><span class="td-muted" style="font-weight:400;text-transform:none;">${fmtDate(w.date)}</span></th>`).join('')}
           </tr></thead>
           <tbody>${body}</tbody>
         </table>
       </div>
     </div>
-    <div class="insight"><span class="insight-icon">✦</span> CPL = spend Meta ÷ inscrits WJ (jamais le pixel). Les lignes « à saisir » (WhatsApp, chat, clics lien live, replay) se remplissent au formulaire. Pour persister côté base : lance <b>supabase-schema.sql</b> puis <b>seed-liberty.sql</b> dans Supabase.</div>
+    <div class="insight"><span class="insight-icon">✦</span> CPL = spend Meta ÷ inscrits WJ (jamais le pixel). Les lignes « à saisir » (clics lien live, taux de visionnage du live) se remplissent au formulaire. Pour persister côté base : lance <b>supabase-schema.sql</b> puis <b>seed-liberty.sql</b> dans Supabase.</div>
   `;
 }
 
