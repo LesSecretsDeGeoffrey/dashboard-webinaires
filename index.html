@@ -2068,6 +2068,15 @@ async function reloadData() {
     showErrorToast('Erreur de synchronisation');
     throw e;
   }
+  // Ventes (webhook Systeme.io) — non bloquant : un échec ne casse pas le dashboard
+  try { data.ventes = await sb_loadVentes(); } catch (_) { data.ventes = []; }
+}
+
+// Charge les ventes capturées par le webhook Systeme.io
+async function sb_loadVentes() {
+  const res = await fetch(`${supabase.url}/rest/v1/ventes?select=email,montant,produit,purchased_at&order=purchased_at.desc`, { headers: sbHeaders() });
+  if (!res.ok) return [];
+  return await res.json();
 }
 
 function showErrorToast(msg) {
@@ -2080,7 +2089,7 @@ function showErrorToast(msg) {
 }
 
 // data : objet global reconstitué après chaque sb_loadAllWebinaires()
-let data = { webinaires: [] };
+let data = { webinaires: [], ventes: [] };
 
 // ============================================
 // HELPERS
@@ -3078,7 +3087,42 @@ function funnelWebinaires() {
       byDate[date] = { date, ...seed };
     }
   });
-  return Object.values(byDate).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6);
+  const list = Object.values(byDate).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 6);
+  applyVentesAttribution(list);
+  return list;
+}
+
+// Attribue chaque vente (table ventes, webhook Systeme.io) au live dont la date est
+// la plus proche AVANT l'achat (fenêtre 14 j), puis AJOUTE le réel aux Achats + CA.
+// Les ventes pré-webhook (lives 68/73/78) restent sur leurs valeurs connues ; les
+// ventes captées en direct s'ajoutent au bon live tout en temps réel.
+function applyVentesAttribution(list) {
+  const ventes = data.ventes || [];
+  if (!ventes.length) return;
+  const att = {};
+  ventes.forEach(v => {
+    const pd = (v.purchased_at || '').slice(0, 10);
+    if (!pd) return;
+    let best = null;
+    list.forEach(w => {
+      if (w.date && w.date <= pd) {
+        const days = (new Date(pd) - new Date(w.date)) / 86400000;
+        if (days >= 0 && days <= 14 && (!best || w.date > best.date)) best = w;
+      }
+    });
+    if (best) {
+      (att[best.date] = att[best.date] || { count: 0, montant: 0 });
+      att[best.date].count++;
+      att[best.date].montant += (+v.montant || 0);
+    }
+  });
+  list.forEach(w => {
+    if (att[w.date]) {
+      w.ventes_count = (+w.ventes_count || 0) + att[w.date].count;
+      w.ventes_montant_total = (+w.ventes_montant_total || 0) + Math.round(att[w.date].montant);
+      w._ventes_live = true;
+    }
+  });
 }
 
 // Calculs funnel (null = donnée manquante → cellule neutre "—")
@@ -3168,7 +3212,7 @@ function renderFunnel() {
         </table>
       </div>
     </div>
-    <div class="insight"><span class="insight-icon">✦</span> CPL = spend Meta ÷ inscrits WJ (jamais le pixel). Les lignes « à saisir » (clics lien live, taux de visionnage du live) se remplissent au formulaire. Pour persister côté base : lance <b>supabase-schema.sql</b> puis <b>seed-liberty.sql</b> dans Supabase.</div>
+    <div class="insight"><span class="insight-icon">✦</span> CPL = spend Meta ÷ inscrits WJ (jamais le pixel). <b>Achats + CA</b> se remplissent en direct depuis Systeme.io (webhook) à chaque vente. Les lignes « à saisir » (clics lien live, taux de visionnage du live) se remplissent au formulaire.</div>
   `;
 }
 
