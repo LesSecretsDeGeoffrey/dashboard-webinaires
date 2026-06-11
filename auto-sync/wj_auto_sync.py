@@ -184,7 +184,7 @@ webs = [(wj_date(w), w) for w in wj("webinars").get("webinars", [])]
 targets = sorted([(d, w) for d, w in webs if d and lo <= d <= hi])
 print("Sync WJ -> Supabase | fenetre %s -> %s | %d live(s)" % (lo, hi, len(targets)))
 
-processed = []  # (date_iso, regs, st) pour le predicteur de show-up
+processed = []  # (date_iso, regs, st, sb_id)
 for d, w in targets:
     wid = w["webinar_id"]
     regs = registrants(wid)
@@ -192,7 +192,6 @@ for d, w in targets:
         print("  %s (WJ %s) : 0 inscrit, skip" % (d, wid))
         continue
     st = stats(regs)
-    processed.append((d, regs, st))
     # Jamais écraser de la présence déjà en base par du 0 (live pas encore passé)
     patch = {"inscrits_total": st["inscrits_total"], "inscrits_ads": st["inscrits_ads"],
              "inscrits_organique": st["inscrits_organique"]}
@@ -201,13 +200,16 @@ for d, w in targets:
             patch[k] = st[k]
     rows = sb("GET", "/rest/v1/webinaires?date=eq.%s&select=id" % d) or []
     if rows:
-        sb("PATCH", "/rest/v1/webinaires?id=eq.%s" % rows[0]["id"], patch, prefer="return=minimal")
+        sb_id = rows[0]["id"]
+        sb("PATCH", "/rest/v1/webinaires?id=eq.%s" % sb_id, patch, prefer="return=minimal")
         action = "maj"
     else:
-        sb("POST", "/rest/v1/webinaires",
-           {"date": d, "heure": "18:00", "titre": w.get("name") or ("Webinaire %s" % d),
-            "type": "atelier", **patch}, prefer="return=minimal")
+        created = sb("POST", "/rest/v1/webinaires",
+                     {"date": d, "heure": "18:00", "titre": w.get("name") or ("Webinaire %s" % d),
+                      "type": "atelier", **patch}, prefer="return=representation") or []
+        sb_id = created[0]["id"] if created else None
         action = "CREE"
+    processed.append((d, regs, st, sb_id))
     print("  %s (WJ %s) [%s] : %d ins (%d ads) | debut %d | pic %d | pitch %d | tx %d%%" % (
         d, wid, action, st["inscrits_total"], st["inscrits_ads"],
         st["presents_debut"], st["presents_pic"], st["presents_pitch"], st["tx_visionnage_live"]))
@@ -217,8 +219,8 @@ for d, w in targets:
 # applique au mix d'anciennete des inscrits du prochain live. PATCH separe et garde
 # (try/except) : si la colonne showup_previsionnel n'existe pas encore, le sync
 # principal n'est PAS affecte.
-passes = [(d, regs) for d, regs, st in processed if st["presents_pic"] > 0]
-futurs = [(d, regs) for d, regs, st in processed if st["presents_pic"] == 0
+passes = [(d, regs) for d, regs, st, _ in processed if st["presents_pic"] > 0]
+futurs = [(d, regs) for d, regs, st, _ in processed if st["presents_pic"] == 0
           and d >= today.isoformat()]
 if passes and futurs:
     ref_d, ref_regs = passes[-1]
@@ -266,7 +268,7 @@ if META_TOKEN and processed:
         toutes = [r["date"] for r in (sb("GET", "/rest/v1/webinaires?select=date&order=date.asc") or [])]
     except Exception:
         toutes = []
-    for d, regs, st in processed:
+    for d, regs, st, _ in processed:
         avant = [x for x in toutes if x < d]
         since = (datetime.date.fromisoformat(avant[-1]) + datetime.timedelta(days=1)).isoformat() \
             if avant else (datetime.date.fromisoformat(d) - datetime.timedelta(days=6)).isoformat()
@@ -280,5 +282,113 @@ if META_TOKEN and processed:
             print("  %s : Meta skip (%s)" % (d, str(e)[:120]))
 else:
     print("Meta : META_TOKEN absent -> vues/clics/budget non synchronises (optionnel)")
+
+# --- DROP-OFF minute par minute + HESITANTS CHAUDS -> DM Tracking ---
+PRICE_MIN = int(os.environ.get("PRICE_MIN", "100"))  # minute ou le prix est annonce
+SYSTEME_API_KEY = os.environ.get("SYSTEME_API_KEY", "").strip()
+
+
+def acheteurs_connus():
+    """Emails a NE JAMAIS DM : ventes Methode (table ventes) + tag acheteur Systeme.io."""
+    emails = set()
+    try:
+        for v in (sb("GET", "/rest/v1/ventes?select=email,montant") or []):
+            if v.get("email") and (v.get("montant") or 0) >= 100:
+                emails.add(str(v["email"]).lower())
+    except Exception:
+        pass
+    if SYSTEME_API_KEY:
+        try:
+            after = None
+            for _ in range(60):
+                q = "https://api.systeme.io/api/contacts?limit=100&tags=1850371" + (
+                    ("&startingAfter=%s" % after) if after else "")
+                req = urllib.request.Request(q, headers={"X-API-Key": SYSTEME_API_KEY, "User-Agent": UA})
+                with urllib.request.urlopen(req, timeout=60) as r:
+                    dd = json.loads(r.read().decode())
+                items = dd.get("items", [])
+                for c in items:
+                    if c.get("email"):
+                        emails.add(str(c["email"]).lower())
+                if not dd.get("hasMore") or not items:
+                    break
+                after = items[-1]["id"]
+        except Exception as e:
+            print("Exclusion Systeme.io : skip (%s)" % str(e)[:80])
+    return emails
+
+
+def e164(r):
+    cc = "".join(ch for ch in str(r.get("phone_country_code") or "") if ch.isdigit())
+    num = "".join(ch for ch in str(r.get("phone_number") or "") if ch.isdigit())
+    if not num:
+        return None
+    return ("+" + cc + num.lstrip("0")) if cc else None
+
+
+exclus = None
+for d, regs, st, sb_id in processed:
+    if not sb_id or st["presents_pic"] <= 0:
+        continue
+    att = [r for r in regs if str(r.get("attended_live")) == "Yes"]
+
+    # 1) Courbe de presence minute par minute (page Drop-off du dashboard)
+    try:
+        fins = sorted(dur(r.get("entered_live")) + dur(r.get("time_live")) for r in att)
+        fin_min = min(240, int(fins[max(0, int(len(fins) * 0.98) - 1)] / 60) + 5)
+        pts = []
+        for m in range(0, fin_min + 1):
+            t = m * 60
+            pts.append(sum(1 for r in att
+                           if dur(r.get("entered_live")) <= t <= dur(r.get("entered_live")) + dur(r.get("time_live"))))
+        pic = max(pts) or 1
+        rows_out = []
+        for m, n in enumerate(pts):
+            delta = (pts[m - 1] - n) if m > 0 else 0
+            rows_out.append({"webinaire_id": sb_id, "minute": m, "presents_count": n,
+                             "drop_pct": round((pic - n) / pic * 100, 2),
+                             "is_drop_critical": bool(m > 0 and delta >= max(3, pic * 0.03))})
+        sb("DELETE", "/rest/v1/dropoff_points?webinaire_id=eq.%s" % sb_id)
+        for i in range(0, len(rows_out), 200):
+            sb("POST", "/rest/v1/dropoff_points", rows_out[i:i + 200], prefer="return=minimal")
+        print("  %s : drop-off ecrit (%d minutes, pic %d)" % (d, len(rows_out), pic))
+    except Exception as e:
+        print("  %s : drop-off skip (%s)" % (d, str(e)[:100]))
+
+    # 2) Hesitants chauds -> DM Tracking (lives de moins de 8 jours, une seule fois)
+    if (today - datetime.date.fromisoformat(d)).days > 8:
+        continue
+    try:
+        deja = sb("GET", "/rest/v1/dm_prospects?webinaire_id=eq.%s&source=eq.auto&select=id&limit=1" % sb_id) or []
+        if deja:
+            continue
+        if exclus is None:
+            exclus = acheteurs_connus()
+            print("Exclusion DM : %d acheteurs connus" % len(exclus))
+        chauds = []
+        for r in att:
+            em = (r.get("email") or "").lower().strip()
+            ent, tl = dur(r.get("entered_live")), dur(r.get("time_live"))
+            if not em or em in exclus or str(r.get("purchased_live")) == "Yes":
+                continue
+            if not (ent <= PRICE_MIN * 60 <= ent + tl):  # present au moment du prix
+                continue
+            chauds.append((tl, r))
+        chauds.sort(key=lambda x: -x[0])
+        rows_dm = []
+        for tl, r in chauds[:40]:
+            h, mn = int(tl // 3600), int((tl % 3600) // 60)
+            rows_dm.append({"webinaire_id": sb_id,
+                            "prenom": (r.get("first_name") or "?")[:60],
+                            "email": (r.get("email") or "").lower(),
+                            "telephone": e164(r) or "",
+                            "time_live_min": int(tl / 60),
+                            "source": "auto", "status": "a_envoyer",
+                            "notes": "[auto] reste %dh%02d, present au prix (min %d)" % (h, mn, PRICE_MIN)})
+        if rows_dm:
+            sb("POST", "/rest/v1/dm_prospects", rows_dm, prefer="return=minimal")
+            print("  %s : %d hesitants chauds -> DM Tracking" % (d, len(rows_dm)))
+    except Exception as e:
+        print("  %s : hesitants skip (migration-dm.sql lancee ? %s)" % (d, str(e)[:100]))
 
 print("DONE")

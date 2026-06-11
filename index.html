@@ -3197,6 +3197,11 @@ const F = {
   roas: w => (w.ads_depense > 0 && w.ventes_montant_total > 0) ? (w.ventes_montant_total / w.ads_depense) : null,
   caInscrit: w => (w.ventes_montant_total > 0 && (w.inscrits_ads || 0) > 0) ? (w.ventes_montant_total / w.inscrits_ads) : null,
   caPresent: w => (w.ventes_montant_total > 0 && (w.presents_pic || 0) > 0) ? (w.ventes_montant_total / w.presents_pic) : null,
+  cpc: w => (w.ads_depense > 0 && w.clics > 0) ? (w.ads_depense / w.clics) : null,
+  showupPic: w => ((w.presents_pic || 0) > 0 && w.inscrits_total > 0) ? (w.presents_pic / w.inscrits_total * 100) : null,
+  coutPresent: w => (w.ads_depense > 0 && (w.presents_pic || 0) > 0) ? (w.ads_depense / w.presents_pic) : null,
+  coutVuOffre: w => (w.ads_depense > 0 && (w.presents_pitch || 0) > 0) ? (w.ads_depense / w.presents_pitch) : null,
+  caEncaisse: w => { const t = (+w.paiements_1x || 0) + (+w.paiements_3x || 0) + (+w.paiements_4x_paypal || 0); return t > 0 ? ((+w.paiements_1x || 0) * 497 + (+w.paiements_3x || 0) * 166 + (+w.paiements_4x_paypal || 0) * 125) : null; },
   pctFacilites: w => { const t = (+w.paiements_1x || 0) + (+w.paiements_3x || 0) + (+w.paiements_4x_paypal || 0); return t > 0 ? (((+w.paiements_3x || 0) + (+w.paiements_4x_paypal || 0)) / t * 100) : null; }
 };
 
@@ -3232,15 +3237,21 @@ function renderFunnel() {
     { label: 'Budget', disp: w => M(w.ads_depense), raw: () => null },
     { label: 'CPL', sub: 'budget ÷ inscrits ads', disp: w => M2(F.cpl(w)), raw: w => F.cpl(w), rule: { max: 10 } },
     { label: 'CPM', sub: 'budget ÷ vues × 1000', disp: w => M2(F.cpm(w)), raw: () => null },
+    { label: 'CPC', sub: 'budget ÷ clics', disp: w => M2(F.cpc(w)), raw: w => F.cpc(w), dir: 'down' },
     { group: 'Présence & engagement' },
     { label: 'Présence début', sub: '3-5 min ÷ inscrits', disp: w => P(F.presDebut(w)), raw: w => F.presDebut(w), rule: { min: 30 } },
+    { label: 'Show-up', sub: 'pic présents ÷ inscrits', disp: w => P(F.showupPic(w)), raw: w => F.showupPic(w), rule: { min: 30 } },
+    { label: 'Coût par présent', sub: 'budget ÷ pic présents', disp: w => M2(F.coutPresent(w)), raw: w => F.coutPresent(w), dir: 'down' },
     { label: 'Présence à l\'offre', sub: '÷ pic présents', disp: w => P(F.presOffre(w)), raw: w => F.presOffre(w), rule: { min: 60 } },
+    { label: 'Coût par vu d\'offre', sub: 'budget ÷ présents au pitch', disp: w => M2(F.coutVuOffre(w)), raw: w => F.coutVuOffre(w), dir: 'down' },
     { label: 'Taux moyen de visionnage du live', sub: '% du live regardé', disp: w => w.tx_visionnage_live > 0 ? fmtPct(w.tx_visionnage_live) : '—', raw: () => null },
     { label: 'Clics sur le lien (live)', sub: '÷ présents', disp: w => { const p = F.clicLienPct(w); return p === null ? '—' : fmtPct(p) + ' (' + fmt(w.clics_lien) + ')'; }, raw: w => F.clicLienPct(w), rule: { min: 10 } },
     { group: 'Ventes' },
     { label: 'Achats', disp: w => I(w.ventes_count), raw: () => null },
     { label: 'dont ventes différées', sub: 'J+1 et après (webhook)', disp: w => w._ventes_live ? `${fmt(w._diff || 0)} · ${fmt(w._diffCa || 0)} €` : '—', raw: () => null },
-    { label: 'Montant ventes', disp: w => M(w.ventes_montant_total), raw: () => null },
+    { label: 'Montant ventes', sub: 'CA facturé (valeur des ventes)', disp: w => M(w.ventes_montant_total), raw: () => null },
+    { label: 'CA encaissé (1ʳᵉ échéance)', sub: '1× plein + 1ʳᵉˢ mensualités 3×/4×', disp: w => { const v = F.caEncaisse(w); return v === null ? '—' : fmt(v) + ' €'; }, raw: () => null },
+    { label: 'Ventes 1× · 3× · 4×', sub: 'répartition des paiements', disp: w => { const t = (+w.paiements_1x || 0) + (+w.paiements_3x || 0) + (+w.paiements_4x_paypal || 0); return t > 0 ? `${fmt(+w.paiements_1x || 0)} · ${fmt(+w.paiements_3x || 0)} · ${fmt(+w.paiements_4x_paypal || 0)}` : '—'; }, raw: () => null },
     { label: 'Back-end 17 €', sub: 'relances post-live', disp: w => w._ventes_live ? `${fmt(w._b17 || 0)} · ${fmt(w._b17Ca || 0)} €` : '—', raw: () => null },
     { label: 'CA par inscrit', sub: 'CA ÷ inscrits ads · vert si > CPL', disp: w => { const v = F.caInscrit(w); return v === null ? '—' : fmt(v, 2) + ' €'; }, raw: w => F.caInscrit(w), dir: 'up', cls: w => { const v = F.caInscrit(w), c = F.cpl(w); return (v === null || c === null) ? '' : (v > c ? 'cell-ok' : 'cell-ko'); } },
     { label: 'CA par présent', sub: 'CA ÷ pic présents', disp: w => { const v = F.caPresent(w); return v === null ? '—' : fmt(v, 2) + ' €'; }, raw: w => F.caPresent(w), dir: 'up' },
@@ -3324,6 +3335,13 @@ function renderFunnel() {
 // ============================================
 let dmFilter = 'tous';
 
+// Lien WhatsApp pré-rempli pour un hésitant (le clic passe aussi le statut en "Envoyé")
+function waUrl(p) {
+  const tel = String(p.telephone || '').replace(/[^\d]/g, '');
+  const msg = `Salut ${p.prenom} ! C'est Geoffrey 🙂 Tu étais avec moi au live dimanche soir, et je crois que tu es restée presque jusqu'au bout... Dis-moi, qu'est-ce qui t'a retenue de nous rejoindre dans la Méthode ? Si c'est le budget, il y a le paiement en 4 fois 125 € (et la garantie 14 jours)`;
+  return `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
+}
+
 function renderDM() {
   const all = [];
   data.webinaires.forEach(w => {
@@ -3357,7 +3375,11 @@ function renderDM() {
 
   tbody.innerHTML = filtered.map(p => `
     <tr>
-      <td class="td-bold">${escapeHtml(p.prenom)}</td>
+      <td class="td-bold">${escapeHtml(p.prenom)}
+        ${p.email ? `<div class="td-mono" style="font-size:11px;color:var(--gris-mute);font-weight:400;">${escapeHtml(p.email)}</div>` : ''}
+        ${p.time_live_min > 0 ? `<div style="font-size:11px;color:var(--or-clair);font-weight:400;">🔥 resté ${Math.floor(p.time_live_min / 60)}h${String(p.time_live_min % 60).padStart(2, '0')}</div>` : ''}
+        ${p.telephone ? `<a class="btn btn-secondary" style="padding:3px 10px;font-size:11px;margin-top:5px;display:inline-flex;" target="_blank" rel="noopener" href="${waUrl(p)}" onclick="updateDmStatus('${p.webinaire_id}', '${p.id}', 'envoye')">💬 WhatsApp</a>` : ''}
+      </td>
       <td><span class="td-muted">${escapeHtml(p.webinaire_titre)}</span><br><span class="td-mono" style="font-size:11px;color:var(--gris-mute);">${fmtDate(p.webinaire_date)}</span></td>
       <td>
         <select onchange="updateDmStatus('${p.webinaire_id}', '${p.id}', this.value)" class="form-select" style="padding: 4px 10px; font-size: 12px;">
