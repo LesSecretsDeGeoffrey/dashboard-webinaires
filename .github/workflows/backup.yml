@@ -1,0 +1,38 @@
+# Sauvegarde hebdomadaire CHIFFRÉE de la base (webinaires, ventes, dm_prospects, objections).
+# Le dump est chiffré (AES-256, passphrase = secret BACKUP_PASS) avant d'être commité
+# dans backups/ → aucune donnée lisible dans le repo public.
+# Restauration : openssl enc -d -aes-256-cbc -pbkdf2 -in backup-latest.tgz.enc -out dump.tgz -pass pass:<BACKUP_PASS>
+name: Backup chiffre
+
+on:
+  schedule:
+    - cron: '47 4 * * 1' # tous les lundis 04:47 UTC
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dump + chiffrement + commit
+        env:
+          BACKUP_PASS: ${{ secrets.BACKUP_PASS }}
+          SB: https://mxnrqnpvcxwdwykzzchk.supabase.co
+          KEY: sb_publishable_f_MKNNQu-CG7LqW3Bs0sUA_TIU2fBUf
+        run: |
+          set -e
+          mkdir -p backups /tmp/dump
+          for t in webinaires ventes dm_prospects objections; do
+            curl -sf "$SB/rest/v1/$t?select=*" -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -o "/tmp/dump/$t.json"
+          done
+          tar czf /tmp/dump.tgz -C /tmp/dump .
+          openssl enc -aes-256-cbc -pbkdf2 -salt -in /tmp/dump.tgz -out backups/backup-latest.tgz.enc -pass env:BACKUP_PASS
+          cp backups/backup-latest.tgz.enc "backups/backup-$(date +%Y%m%d).tgz.enc"
+          git config user.name "backup-bot"
+          git config user.email "backup-bot@users.noreply.github.com"
+          git add backups
+          git commit -m "backup: $(date +%Y-%m-%d)" || echo "rien de nouveau"
+          git push

@@ -3136,14 +3136,17 @@ function applyVentesAttribution(list) {
   if (!brut.length || !list || !list.length) return;
   // Dédoublonnage par email : un re-tag Systeme.io peut créer 2 lignes pour le même achat
   // (on garde la PREMIÈRE occurrence chronologique = le vrai moment d'achat)
+  // (clé email|montant : un re-tag du même achat est ignoré, mais la même personne
+  // peut acheter le 17 € PUIS la Méthode sans être écrasée)
   const seen = new Set();
   const ventes = [...brut]
     .sort((a, b) => (a.purchased_at || '').localeCompare(b.purchased_at || ''))
     .filter(v => {
       const e = (v.email || '').toLowerCase().trim();
       if (!e) return true;
-      if (seen.has(e)) return false;
-      seen.add(e);
+      const k = e + '|' + (+v.montant || 0);
+      if (seen.has(k)) return false;
+      seen.add(k);
       return true;
     });
   const att = {};
@@ -3158,15 +3161,24 @@ function applyVentesAttribution(list) {
       }
     });
     if (best) {
-      (att[best.date] = att[best.date] || { count: 0, montant: 0 });
-      att[best.date].count++;
-      att[best.date].montant += (+v.montant || 0);
+      const a = (att[best.date] = att[best.date] || { count: 0, montant: 0, diff: 0, diffCa: 0, b17: 0, b17Ca: 0 });
+      const m = +v.montant || 0;
+      if (m > 0 && m < 100) {
+        // back-end low-ticket (17 €) : compté à part, n'entre PAS dans les achats Méthode
+        a.b17++; a.b17Ca += m;
+      } else {
+        a.count++; a.montant += m;
+        if (pd !== best.date) { a.diff++; a.diffCa += m; } // vente différée (J+1 et après)
+      }
     }
   });
   list.forEach(w => {
     if (att[w.date]) {
-      w.ventes_count = (+w.ventes_count || 0) + att[w.date].count;
-      w.ventes_montant_total = (+w.ventes_montant_total || 0) + Math.round(att[w.date].montant);
+      const a = att[w.date];
+      w.ventes_count = (+w.ventes_count || 0) + a.count;
+      w.ventes_montant_total = (+w.ventes_montant_total || 0) + Math.round(a.montant);
+      w._diff = a.diff; w._diffCa = Math.round(a.diffCa);
+      w._b17 = a.b17; w._b17Ca = Math.round(a.b17Ca);
       w._ventes_live = true;
     }
   });
@@ -3182,7 +3194,10 @@ const F = {
   presOffre: w => { const pic = w.presents_pic, pi = w.presents_pitch; return (pic > 0 && pi > 0 && pic !== pi) ? (pi / pic * 100) : null; },
   coutVente: w => (w.ventes_count > 0 && w.ads_depense > 0) ? (w.ads_depense / w.ventes_count) : null,
   clicLienPct: w => { const b = w.presents_pic || w.presents_pitch; return (w.clics_lien > 0 && b > 0) ? (w.clics_lien / b * 100) : null; },
-  roas: w => (w.ads_depense > 0 && w.ventes_montant_total > 0) ? (w.ventes_montant_total / w.ads_depense) : null
+  roas: w => (w.ads_depense > 0 && w.ventes_montant_total > 0) ? (w.ventes_montant_total / w.ads_depense) : null,
+  caInscrit: w => (w.ventes_montant_total > 0 && (w.inscrits_ads || 0) > 0) ? (w.ventes_montant_total / w.inscrits_ads) : null,
+  caPresent: w => (w.ventes_montant_total > 0 && (w.presents_pic || 0) > 0) ? (w.ventes_montant_total / w.presents_pic) : null,
+  pctFacilites: w => { const t = (+w.paiements_1x || 0) + (+w.paiements_3x || 0) + (+w.paiements_4x_paypal || 0); return t > 0 ? (((+w.paiements_3x || 0) + (+w.paiements_4x_paypal || 0)) / t * 100) : null; }
 };
 
 // Couleur selon le seuil : vert (atteint), rouge (sous l'objectif), neutre (pas de seuil / pas de donnée)
@@ -3224,24 +3239,30 @@ function renderFunnel() {
     { label: 'Clics sur le lien (live)', sub: '÷ présents', disp: w => { const p = F.clicLienPct(w); return p === null ? '—' : fmtPct(p) + ' (' + fmt(w.clics_lien) + ')'; }, raw: w => F.clicLienPct(w), rule: { min: 10 } },
     { group: 'Ventes' },
     { label: 'Achats', disp: w => I(w.ventes_count), raw: () => null },
+    { label: 'dont ventes différées', sub: 'J+1 et après (webhook)', disp: w => w._ventes_live ? `${fmt(w._diff || 0)} · ${fmt(w._diffCa || 0)} €` : '—', raw: () => null },
     { label: 'Montant ventes', disp: w => M(w.ventes_montant_total), raw: () => null },
+    { label: 'Back-end 17 €', sub: 'relances post-live', disp: w => w._ventes_live ? `${fmt(w._b17 || 0)} · ${fmt(w._b17Ca || 0)} €` : '—', raw: () => null },
+    { label: 'CA par inscrit', sub: 'CA ÷ inscrits ads · vert si > CPL', disp: w => { const v = F.caInscrit(w); return v === null ? '—' : fmt(v, 2) + ' €'; }, raw: w => F.caInscrit(w), dir: 'up', cls: w => { const v = F.caInscrit(w), c = F.cpl(w); return (v === null || c === null) ? '' : (v > c ? 'cell-ok' : 'cell-ko'); } },
+    { label: 'CA par présent', sub: 'CA ÷ pic présents', disp: w => { const v = F.caPresent(w); return v === null ? '—' : fmt(v, 2) + ' €'; }, raw: w => F.caPresent(w), dir: 'up' },
     { label: 'Coût pub / vente', sub: 'budget ÷ achats', disp: w => M(F.coutVente(w)), raw: w => F.coutVente(w), rule: { max: 497 } },
     { label: 'ROAS', sub: 'CA ÷ budget pub', disp: w => { const r = F.roas(w); return r === null ? '—' : fmt(r, 2) + '×'; }, raw: w => F.roas(w), rule: { min: 1 } },
-    { label: 'Taux de conversion', sub: 'achats ÷ présents', disp: w => w.presents_pitch > 0 ? fmtPct(conversion(w)) : '—', raw: w => w.presents_pitch > 0 ? conversion(w) : null, rule: { min: 3 } }
+    { label: 'Taux de conversion', sub: 'achats ÷ présents', disp: w => w.presents_pitch > 0 ? fmtPct(conversion(w)) : '—', raw: w => w.presents_pitch > 0 ? conversion(w) : null, rule: { min: 3 } },
+    { label: 'Paiements en plusieurs fois', sub: '3× et 4× ÷ ventes', disp: w => { const v = F.pctFacilites(w); return v === null ? '—' : fmtPct(v, 0); }, raw: () => null }
   ];
 
   const colspan = ws.length + 1;
   const body = rows.map(r => {
     if (r.group) return `<tr class="funnel-group"><td colspan="${colspan}">${r.group}</td></tr>`;
     const cells = ws.map((w, i) => {
-      const cls = seuilClass(r.raw(w), r.rule);
-      // Tendance : flèche sur le live le plus récent vs le précédent (métriques à seuil uniquement)
+      // cls custom (ex. CA/inscrit : vert si > CPL) sinon seuil fixe
+      const cls = r.cls ? r.cls(w) : seuilClass(r.raw(w), r.rule);
+      // Tendance : flèche sur le live le plus récent vs le précédent
       let delta = '';
-      if (i === 0 && ws.length > 1 && r.rule) {
+      if (i === 0 && ws.length > 1 && (r.rule || r.dir)) {
         const v0 = r.raw(ws[0]), v1 = r.raw(ws[1]);
         if (v0 !== null && v1 !== null && v0 !== v1) {
           const up = v0 > v1;
-          const good = r.rule.min !== undefined ? up : !up;
+          const good = r.dir ? (r.dir === 'up' ? up : !up) : (r.rule.min !== undefined ? up : !up);
           delta = `<span class="delta ${good ? 'delta-good' : 'delta-bad'}" title="vs live précédent">${up ? '▲' : '▼'}</span>`;
         }
       }
@@ -3251,8 +3272,8 @@ function renderFunnel() {
     return `<tr><td class="td-bold">${r.label}${sub}</td>${cells}</tr>`;
   }).join('');
 
-  // Diagnostic auto du dernier live : liste les seuils dans le rouge + le levier associé
-  const latest = ws[0];
+  // Diagnostic auto du dernier live JOUÉ (pas un live à venir encore vide)
+  const latest = ws.find(w => (w.presents_pic || 0) > 0 || (w.ventes_count || 0) > 0) || ws[0];
   const LEVIERS = {
     'CTR': 'créas', 'Taux d\'optin': 'la page de capture', 'CPL': 'ciblage / créas',
     'Présence début': 'rappels & show-up', 'Présence à l\'offre': 'rétention pendant le live',
@@ -3265,7 +3286,15 @@ function renderFunnel() {
     ? `<div class="insight"><span class="insight-icon">🎯</span> <b>Diagnostic ${nomLive} :</b> ${rouges.map(r => `🔴 ${r.label} ${r.disp(latest)} → travailler ${LEVIERS[r.label] || 'ce point'}`).join(' · ')}</div>`
     : `<div class="insight"><span class="insight-icon">✅</span> <b>${nomLive} :</b> tous les seuils au vert</div>`;
 
+  // Show-up prévisionnel du prochain live (calculé par le robot WJ selon l'ancienneté des inscrits)
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const prochain = ws.find(w => w.date >= todayIso && !(w.presents_pic > 0) && (w.showup_previsionnel || 0) > 0);
+  const prevision = prochain
+    ? `<div class="insight"><span class="insight-icon">🔮</span> <b>${escapeHtml(prochain.titre || fmtDate(prochain.date))} :</b> ${fmt(prochain.inscrits_total)} inscrits → show-up prévisionnel ~${prochain.showup_previsionnel} % ≈ <b>${fmt(Math.round((prochain.inscrits_total || 0) * prochain.showup_previsionnel / 100))} présents</b> (selon l'ancienneté des inscriptions, calibré sur le dernier live)</div>`
+    : '';
+
   container.innerHTML = `
+    ${prevision}
     ${diag}
     <div class="table-card">
       <div class="table-header">

@@ -94,6 +94,55 @@ def registrants(wid):
     return out
 
 
+def signup_date(r):
+    """'Sun, 7 Jun 2026, 08:16 PM' -> datetime.date (None si invalide)."""
+    try:
+        d = str(r.get("signup_date", "")).split(", ")[1].split(" ")
+        return datetime.date(int(d[2]), int(MOIS.get(d[1][:3], "01")), int(d[0]))
+    except Exception:
+        return None
+
+
+def age_bucket(age_days):
+    """Anciennete d'inscription -> tranche (les inscrits du jour J se pointent ~2x plus)."""
+    if age_days <= 0:
+        return 0   # jour J
+    if age_days == 1:
+        return 1   # veille
+    if age_days <= 3:
+        return 2
+    if age_days <= 6:
+        return 3
+    return 4       # J-7 et plus
+
+
+def showup_rates_par_anciennete(regs, live_date):
+    """Taux de show-up REEL par tranche d'anciennete, mesure sur un live passe."""
+    tot, att = {}, {}
+    for r in regs:
+        sd = signup_date(r)
+        if not sd:
+            continue
+        b = age_bucket((live_date - sd).days)
+        tot[b] = tot.get(b, 0) + 1
+        if str(r.get("attended_live")) == "Yes":
+            att[b] = att.get(b, 0) + 1
+    glob = sum(att.values()) / sum(tot.values()) if tot else 0
+    return {b: (att.get(b, 0) / tot[b]) if tot[b] >= 10 else glob for b in tot}, glob
+
+
+def predit_showup(regs, live_date, rates, glob):
+    """Show-up previsionnel (%) du prochain live selon le mix d'anciennete de SES inscrits."""
+    if not regs:
+        return 0
+    pred = 0.0
+    for r in regs:
+        sd = signup_date(r)
+        b = age_bucket((live_date - sd).days) if sd else 4
+        pred += rates.get(b, glob)
+    return max(0, min(100, round(100 * pred / len(regs))))
+
+
 def stats(regs):
     ads = [r for r in regs if (r.get("utm_source") or "").lower() in PAID]
     mc = [r for r in regs if (r.get("utm_source") or "").lower() == "post"
@@ -133,6 +182,7 @@ webs = [(wj_date(w), w) for w in wj("webinars").get("webinars", [])]
 targets = sorted([(d, w) for d, w in webs if d and lo <= d <= hi])
 print("Sync WJ -> Supabase | fenetre %s -> %s | %d live(s)" % (lo, hi, len(targets)))
 
+processed = []  # (date_iso, regs, st) pour le predicteur de show-up
 for d, w in targets:
     wid = w["webinar_id"]
     regs = registrants(wid)
@@ -140,6 +190,7 @@ for d, w in targets:
         print("  %s (WJ %s) : 0 inscrit, skip" % (d, wid))
         continue
     st = stats(regs)
+    processed.append((d, regs, st))
     # Jamais écraser de la présence déjà en base par du 0 (live pas encore passé)
     patch = {"inscrits_total": st["inscrits_total"], "inscrits_ads": st["inscrits_ads"],
              "inscrits_organique": st["inscrits_organique"]}
@@ -158,5 +209,27 @@ for d, w in targets:
     print("  %s (WJ %s) [%s] : %d ins (%d ads) | debut %d | pic %d | pitch %d | tx %d%%" % (
         d, wid, action, st["inscrits_total"], st["inscrits_ads"],
         st["presents_debut"], st["presents_pic"], st["presents_pitch"], st["tx_visionnage_live"]))
+
+# --- SHOW-UP PREVISIONNEL des lives a venir ---
+# Calibre sur le DERNIER live passe (taux de show-up reel par anciennete d'inscription),
+# applique au mix d'anciennete des inscrits du prochain live. PATCH separe et garde
+# (try/except) : si la colonne showup_previsionnel n'existe pas encore, le sync
+# principal n'est PAS affecte.
+passes = [(d, regs) for d, regs, st in processed if st["presents_pic"] > 0]
+futurs = [(d, regs) for d, regs, st in processed if st["presents_pic"] == 0
+          and d >= today.isoformat()]
+if passes and futurs:
+    ref_d, ref_regs = passes[-1]
+    rates, glob = showup_rates_par_anciennete(ref_regs, datetime.date.fromisoformat(ref_d))
+    for d, regs in futurs:
+        pct = predit_showup(regs, datetime.date.fromisoformat(d), rates, glob)
+        if pct <= 0:
+            continue
+        try:
+            sb("PATCH", "/rest/v1/webinaires?date=eq.%s" % d,
+               {"showup_previsionnel": pct}, prefer="return=minimal")
+            print("  %s : show-up previsionnel %d%% (calibre sur %s)" % (d, pct, ref_d))
+        except Exception as e:
+            print("  %s : prevision %d%% NON ecrite (colonne manquante ? %s)" % (d, pct, e))
 
 print("DONE")
