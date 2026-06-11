@@ -20,4 +20,5 @@ jobs:
         env:
           WJ_API_KEY: ${{ secrets.WJ_API_KEY }}
           META_TOKEN: ${{ secrets.META_TOKEN }}
+          SYSTEME_API_KEY: ${{ secrets.SYSTEME_API_KEY }}
         run: python3 auto-sync/wj_auto_sync.py
