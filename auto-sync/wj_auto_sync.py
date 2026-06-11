@@ -27,6 +27,8 @@ import urllib.request
 import urllib.parse
 
 WJ_API_KEY = os.environ.get("WJ_API_KEY", "").strip()
+META_TOKEN = os.environ.get("META_TOKEN", "").strip()  # optionnel : si absent, la partie Meta est sautée
+META_ACCOUNT = os.environ.get("META_ACCOUNT", "3739233859731846")
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "https://mxnrqnpvcxwdwykzzchk.supabase.co")
 SUPABASE_KEY = os.environ.get("SUPABASE_KEY", "sb_publishable_f_MKNNQu-CG7LqW3Bs0sUA_TIU2fBUf")
 PITCH_START_MIN = int(os.environ.get("PITCH_START_MIN", "70"))
@@ -231,5 +233,52 @@ if passes and futurs:
             print("  %s : show-up previsionnel %d%% (calibre sur %s)" % (d, pct, ref_d))
         except Exception as e:
             print("  %s : prevision %d%% NON ecrite (colonne manquante ? %s)" % (d, pct, e))
+
+# --- PUB META (vues / clics / budget) — uniquement si un jeton est fourni ---
+# Fenêtre d'acquisition d'un live = lendemain du live précédent -> jour du live
+# (la méthode validée à la main : spend compte entier sur la fenêtre ; suppose
+# que toutes les campagnes actives servent le live en cours, ce qui est le cas).
+def meta_insights(since, until):
+    qs = urllib.parse.urlencode({
+        "fields": "spend,impressions,actions",
+        "time_range": json.dumps({"since": since, "until": until}),
+        "access_token": META_TOKEN,
+    })
+    req = urllib.request.Request(
+        "https://graph.facebook.com/act_%s/insights?%s" % (META_ACCOUNT, qs),
+        headers={"User-Agent": UA})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        rows = json.loads(r.read().decode()).get("data", [])
+    if not rows:
+        return None
+    d0 = rows[0]
+    clics = 0
+    for a in (d0.get("actions") or []):
+        if a.get("action_type") == "link_click":
+            clics = int(float(a.get("value", 0)))
+    return {"vues": int(float(d0.get("impressions", 0))),
+            "clics": clics,
+            "ads_depense": round(float(d0.get("spend", 0)))}
+
+
+if META_TOKEN and processed:
+    try:
+        toutes = [r["date"] for r in (sb("GET", "/rest/v1/webinaires?select=date&order=date.asc") or [])]
+    except Exception:
+        toutes = []
+    for d, regs, st in processed:
+        avant = [x for x in toutes if x < d]
+        since = (datetime.date.fromisoformat(avant[-1]) + datetime.timedelta(days=1)).isoformat() \
+            if avant else (datetime.date.fromisoformat(d) - datetime.timedelta(days=6)).isoformat()
+        try:
+            m = meta_insights(since, d)
+            if m and m["ads_depense"] > 0:
+                sb("PATCH", "/rest/v1/webinaires?date=eq.%s" % d, m, prefer="return=minimal")
+                print("  %s : Meta %s->%s | vues %d | clics %d | spend %d EUR" % (
+                    d, since, d, m["vues"], m["clics"], m["ads_depense"]))
+        except Exception as e:
+            print("  %s : Meta skip (%s)" % (d, str(e)[:120]))
+else:
+    print("Meta : META_TOKEN absent -> vues/clics/budget non synchronises (optionnel)")
 
 print("DONE")

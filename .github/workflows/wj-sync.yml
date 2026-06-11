@@ -19,4 +19,5 @@ jobs:
       - name: Sync WJ -> Supabase
         env:
           WJ_API_KEY: ${{ secrets.WJ_API_KEY }}
+          META_TOKEN: ${{ secrets.META_TOKEN }}
         run: python3 auto-sync/wj_auto_sync.py
