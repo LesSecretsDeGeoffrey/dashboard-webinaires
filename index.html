@@ -3184,6 +3184,9 @@ function applyVentesAttribution(list) {
   });
 }
 
+// Prix de l'offre Méthode par live : 497 € jusqu'au 13/06/2026, 697 € à partir du 14/06
+function prixOffre(dateIso) { return (dateIso || '') >= '2026-06-14' ? 697 : 497; }
+
 // Calculs funnel (null = donnée manquante → cellule neutre "—")
 const F = {
   ctr: w => (w.vues > 0 && w.clics > 0) ? (w.clics / w.vues * 100) : null,
@@ -3201,7 +3204,7 @@ const F = {
   showupPic: w => ((w.presents_pic || 0) > 0 && w.inscrits_total > 0) ? (w.presents_pic / w.inscrits_total * 100) : null,
   coutPresent: w => (w.ads_depense > 0 && (w.presents_pic || 0) > 0) ? (w.ads_depense / w.presents_pic) : null,
   coutVuOffre: w => (w.ads_depense > 0 && (w.presents_pitch || 0) > 0) ? (w.ads_depense / w.presents_pitch) : null,
-  caEncaisse: w => { const t = (+w.paiements_1x || 0) + (+w.paiements_3x || 0) + (+w.paiements_4x_paypal || 0); return t > 0 ? ((+w.paiements_1x || 0) * 497 + (+w.paiements_3x || 0) * 166 + (+w.paiements_4x_paypal || 0) * 125) : null; },
+  caEncaisse: w => { const t = (+w.paiements_1x || 0) + (+w.paiements_3x || 0) + (+w.paiements_4x_paypal || 0); if (t === 0) return null; const px = prixOffre(w.date); return (+w.paiements_1x || 0) * px + (+w.paiements_3x || 0) * Math.ceil(px / 3) + (+w.paiements_4x_paypal || 0) * Math.ceil(px / 4); },
   pctFacilites: w => { const t = (+w.paiements_1x || 0) + (+w.paiements_3x || 0) + (+w.paiements_4x_paypal || 0); return t > 0 ? (((+w.paiements_3x || 0) + (+w.paiements_4x_paypal || 0)) / t * 100) : null; }
 };
 
@@ -3240,9 +3243,12 @@ function renderFunnel() {
     { label: 'CPC', sub: 'budget ÷ clics', disp: w => M2(F.cpc(w)), raw: w => F.cpc(w), dir: 'down' },
     { group: 'Présence & engagement' },
     { label: 'Présence début', sub: '3-5 min ÷ inscrits', disp: w => P(F.presDebut(w)), raw: w => F.presDebut(w), rule: { min: 30 } },
+    { label: 'Présents début', sub: 'en nombre (minute 5)', disp: w => I(w.presents_debut || w.presents_pic), raw: () => null },
     { label: 'Show-up', sub: 'pic présents ÷ inscrits', disp: w => P(F.showupPic(w)), raw: w => F.showupPic(w), rule: { min: 30 } },
+    { label: 'Pic de présents', sub: 'en nombre', disp: w => I(w.presents_pic), raw: () => null },
     { label: 'Coût par présent', sub: 'budget ÷ pic présents', disp: w => M2(F.coutPresent(w)), raw: w => F.coutPresent(w), dir: 'down' },
     { label: 'Présence à l\'offre', sub: '÷ pic présents', disp: w => P(F.presOffre(w)), raw: w => F.presOffre(w), rule: { min: 60 } },
+    { label: 'Présents à l\'offre', sub: 'en nombre', disp: w => I(w.presents_pitch), raw: () => null },
     { label: 'Coût par vu d\'offre', sub: 'budget ÷ présents au pitch', disp: w => M2(F.coutVuOffre(w)), raw: w => F.coutVuOffre(w), dir: 'down' },
     { label: 'Taux moyen de visionnage du live', sub: '% du live regardé', disp: w => w.tx_visionnage_live > 0 ? fmtPct(w.tx_visionnage_live) : '—', raw: () => null },
     { label: 'Clics sur le lien (live)', sub: '÷ présents', disp: w => { const p = F.clicLienPct(w); return p === null ? '—' : fmtPct(p) + ' (' + fmt(w.clics_lien) + ')'; }, raw: w => F.clicLienPct(w), rule: { min: 10 } },
@@ -3255,7 +3261,7 @@ function renderFunnel() {
     { label: 'Back-end 17 €', sub: 'relances post-live', disp: w => w._ventes_live ? `${fmt(w._b17 || 0)} · ${fmt(w._b17Ca || 0)} €` : '—', raw: () => null },
     { label: 'CA par inscrit', sub: 'CA ÷ inscrits ads · vert si > CPL', disp: w => { const v = F.caInscrit(w); return v === null ? '—' : fmt(v, 2) + ' €'; }, raw: w => F.caInscrit(w), dir: 'up', cls: w => { const v = F.caInscrit(w), c = F.cpl(w); return (v === null || c === null) ? '' : (v > c ? 'cell-ok' : 'cell-ko'); } },
     { label: 'CA par présent', sub: 'CA ÷ pic présents', disp: w => { const v = F.caPresent(w); return v === null ? '—' : fmt(v, 2) + ' €'; }, raw: w => F.caPresent(w), dir: 'up' },
-    { label: 'Coût pub / vente', sub: 'budget ÷ achats', disp: w => M(F.coutVente(w)), raw: w => F.coutVente(w), rule: { max: 497 } },
+    { label: 'Coût pub / vente', sub: 'budget ÷ achats · vert si < prix de l\'offre', disp: w => M(F.coutVente(w)), raw: w => F.coutVente(w), dir: 'down', cls: w => { const c = F.coutVente(w); return c === null ? '' : (c <= prixOffre(w.date) ? 'cell-ok' : 'cell-ko'); } },
     { label: 'ROAS', sub: 'CA ÷ budget pub', disp: w => { const r = F.roas(w); return r === null ? '—' : fmt(r, 2) + '×'; }, raw: w => F.roas(w), rule: { min: 1 } },
     { label: 'Taux de conversion', sub: 'achats ÷ présents', disp: w => w.presents_pitch > 0 ? fmtPct(conversion(w)) : '—', raw: w => w.presents_pitch > 0 ? conversion(w) : null, rule: { min: 3 } },
     { label: 'Paiements en plusieurs fois', sub: '3× et 4× ÷ ventes', disp: w => { const v = F.pctFacilites(w); return v === null ? '—' : fmtPct(v, 0); }, raw: () => null }
@@ -3338,7 +3344,8 @@ let dmFilter = 'tous';
 // Lien WhatsApp pré-rempli pour un hésitant (le clic passe aussi le statut en "Envoyé")
 function waUrl(p) {
   const tel = String(p.telephone || '').replace(/[^\d]/g, '');
-  const msg = `Salut ${p.prenom} ! C'est Geoffrey 🙂 Tu étais avec moi au live dimanche soir, et je crois que tu es restée presque jusqu'au bout... Dis-moi, qu'est-ce qui t'a retenue de nous rejoindre dans la Méthode ? Si c'est le budget, il y a le paiement en 4 fois 125 € (et la garantie 14 jours)`;
+  const q4 = Math.ceil(prixOffre(p.webinaire_date) / 4); // 4× : 125 € (497) puis 175 € (697)
+  const msg = `Salut ${p.prenom} ! C'est Geoffrey 🙂 Tu étais avec moi au live dimanche soir, et je crois que tu es restée presque jusqu'au bout... Dis-moi, qu'est-ce qui t'a retenue de nous rejoindre dans la Méthode ? Si c'est le budget, il y a le paiement en 4 fois ${q4} € (et la garantie 14 jours)`;
   return `https://wa.me/${tel}?text=${encodeURIComponent(msg)}`;
 }
 
