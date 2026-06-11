@@ -245,7 +245,7 @@ def meta_insights(since, until):
         "access_token": META_TOKEN,
     })
     req = urllib.request.Request(
-        "https://graph.facebook.com/act_%s/insights?%s" % (META_ACCOUNT, qs),
+        "https://graph.facebook.com/v25.0/act_%s/insights?%s" % (META_ACCOUNT, qs),
         headers={"User-Agent": UA})
     with urllib.request.urlopen(req, timeout=60) as r:
         rows = json.loads(r.read().decode()).get("data", [])
