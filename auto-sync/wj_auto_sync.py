@@ -181,7 +181,7 @@ lo = since or (today - datetime.timedelta(days=10)).isoformat()
 hi = (today + datetime.timedelta(days=10)).isoformat()
 
 webs = [(wj_date(w), w) for w in wj("webinars").get("webinars", [])]
-targets = sorted([(d, w) for d, w in webs if d and lo <= d <= hi])
+targets = sorted([(d, w) for d, w in webs if d and lo <= d <= hi], key=lambda t: t[0])
 print("Sync WJ -> Supabase | fenetre %s -> %s | %d live(s)" % (lo, hi, len(targets)))
 
 processed = []  # (date_iso, regs, st, sb_id)
