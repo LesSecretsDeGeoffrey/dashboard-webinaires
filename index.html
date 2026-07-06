@@ -3184,8 +3184,8 @@ function applyVentesAttribution(list) {
   });
 }
 
-// Prix de l'offre Méthode par live : 497 € jusqu'au 13/06/2026, 697 € à partir du 14/06
-function prixOffre(dateIso) { return (dateIso || '') >= '2026-06-14' ? 697 : 497; }
+// Prix de l'offre Méthode par live : 497 € jusqu'au 13/06, 697 € du 14/06 au 30/06, 297 € (test) à partir du 01/07
+function prixOffre(dateIso) { const d = dateIso || ''; return d >= '2026-07-01' ? 297 : (d >= '2026-06-14' ? 697 : 497); }
 
 // Calculs funnel (null = donnée manquante → cellule neutre "—")
 const F = {
