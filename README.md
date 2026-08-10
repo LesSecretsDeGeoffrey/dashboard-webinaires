@@ -22,3 +22,13 @@ Exécuter le fichier `supabase-schema.sql` dans Supabase Dashboard > SQL Editor.
 ## Déploiement
 
 Push sur la branche `main` du repo GitHub. GitHub Pages déploie automatiquement.
+
+## Ventes — remontée automatique
+
+Depuis le 10/08/2026, chaque vente de La Méthode Fondations Pro arrive toute seule dans la
+table `ventes` : Systeme.io → scénario Make `6834210` → Supabase. Montage et dépannage :
+`webhook-ventes-systeme/README.md` (dépôt parent).
+
+⚠️ `applyVentesAttribution()` **additionne** la table `ventes` et les colonnes
+`ventes_count` / `ventes_montant_total` de la table `webinaires`. Ces colonnes servaient à la
+saisie manuelle : **les laisser à 0**, sinon chaque vente est comptée deux fois.
