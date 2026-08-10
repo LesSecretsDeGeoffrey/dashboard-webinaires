@@ -1,0 +1,32 @@
+# Sync automatique Systeme.io + Meta -> dashboard (table webinaires Supabase).
+# Remplace « Sync WebinarJam » depuis la bascule sur Welya du 09/08/2026.
+#
+# 4x/jour : les inscrits montent en continu pendant la semaine d'acquisition,
+# le budget Meta suit. Le run de 20h05 UTC le dimanche tombe juste apres la fin
+# du live (~22h05 Paris).
+#
+# ⚠️ La PRESENCE ne peut pas etre synchronisee ici : l'API Welya /integrations/*
+# renvoie [] des que le webinaire est termine. Apres chaque live, lancer a la main
+#   python3 dashboard-webinaires-sync/welya_sync.py <export.xlsx> <date> --replay <lien>
+# depuis l'export « Exporter les inscrits » de l'interface Welya.
+#
+# Avant chaque nouveau live : ajouter son entree dans auto-sync/lives.json,
+# sinon le robot ne le voit pas.
+name: Sync inscrits + budget
+
+on:
+  schedule:
+    - cron: '0 5,11,17 * * *'   # 3x/jour (UTC)
+    - cron: '5 20 * * *'        # + tous les soirs 20h05 UTC (22h05 Paris, post-live le dimanche)
+  workflow_dispatch: {}
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Sync Systeme.io + Meta -> Supabase
+        env:
+          SYSTEME_API_KEY: ${{ secrets.SYSTEME_API_KEY }}
+          META_TOKEN: ${{ secrets.META_TOKEN }}
+        run: python3 auto-sync/welya_auto_sync.py

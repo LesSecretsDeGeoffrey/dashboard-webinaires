@@ -1,0 +1,29 @@
+{
+  "_doc": [
+    "Registre des lives : SOURCE DE VERITE unique, partagee par welya_auto_sync.py",
+    "et par cpl_2aout.py (qui le lit s'il le trouve, sinon retombe sur sa copie interne).",
+    "Ajouter une entree AVANT chaque nouveau live, sinon le robot ne le voit pas.",
+    "  tag      : id du tag Systeme.io pose par le formulaire natif de l'optin",
+    "  debut    : 1er jour de la fenetre d'acquisition (spend Meta compte a partir de la)",
+    "  id       : id exact de la campagne Meta. Absent = spend au niveau du compte",
+    "  campagne : fragment du nom Meta, seulement si 'id' est absent",
+    "  titre    : intitule ecrit dans la table webinaires a la creation de la ligne"
+  ],
+  "2026-08-02": {
+    "tag": "2108220",
+    "campagne": "Atelier Macarons 02/08",
+    "debut": "2026-07-28",
+    "titre": "Webinaire Macaron (02/08)",
+    "plateforme": "webinarjam"
+  },
+  "2026-08-09": {
+    "tag": "2116742",
+    "campagne": "Atelier Macarons",
+    "id": "120252592287980606",
+    "debut": "2026-08-04",
+    "titre": "Webinaire Macaron (09/08)",
+    "plateforme": "welya",
+    "welya_webinar_id": 506,
+    "welya_session": "WB506-202608091600-eabm"
+  }
+}

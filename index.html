@@ -1266,8 +1266,6 @@ tr.clickable { cursor: pointer; }
           <div class="page-subtitle">Saisis, importe et analyse chaque session</div>
         </div>
         <div class="flex-row">
-          <label for="csvImport" class="btn btn-secondary" style="cursor: pointer;">📥 Import CSV WebinarJam</label>
-          <input type="file" id="csvImport" accept=".csv" style="display:none">
           <button class="btn btn-secondary" onclick="duplicateLastWebinaire()" title="Pré-remplit la fiche du prochain live (dimanche) à partir du dernier">⧉ Dupliquer le dernier</button>
           <button class="btn btn-primary" onclick="openWebinaireForm()">+ Nouveau webinaire</button>
         </div>
@@ -2876,61 +2874,8 @@ function renderDmInput() {
 }
 
 // ============================================
-// CSV IMPORT
-// ============================================
-document.getElementById('csvImport').addEventListener('change', e => {
-  const file = e.target.files[0];
-  if (!file) return;
-  Papa.parse(file, {
-    header: true,
-    skipEmptyLines: true,
-    complete: results => {
-      try {
-        const rows = results.data;
-        if (rows.length === 0) {
-          alert('CSV vide ou format invalide');
-          return;
-        }
-        const totalInscrits = rows.length;
-        // Détection des présents : colonne "Attended", "Présent", "Live attendance"
-        let presents = 0;
-        rows.forEach(r => {
-          const keys = Object.keys(r);
-          for (const k of keys) {
-            const v = String(r[k] || '').toLowerCase();
-            if (k.toLowerCase().includes('attend') && (v === 'yes' || v === 'oui' || v === 'true' || v === '1')) {
-              presents++; break;
-            }
-          }
-        });
-
-        // Sources
-        let ads = 0, organique = 0, email = 0;
-        rows.forEach(r => {
-          const src = String(r['Source'] || r['source'] || r['Origin'] || '').toLowerCase();
-          if (src.includes('ads') || src.includes('facebook') || src.includes('meta')) ads++;
-          else if (src.includes('email') || src.includes('mail')) email++;
-          else organique++;
-        });
-
-        // Pré-remplir le formulaire
-        openWebinaireForm();
-        document.getElementById('f_inscrits_total').value = totalInscrits;
-        document.getElementById('f_presents_pic').value = presents;
-        document.getElementById('f_presents_pitch').value = presents;
-        document.getElementById('f_inscrits_ads').value = ads;
-        document.getElementById('f_inscrits_organique').value = organique;
-        document.getElementById('f_inscrits_email').value = email;
-        showToast(`CSV importé : ${totalInscrits} inscrits, ${presents} présents`);
-      } catch (err) {
-        console.error(err);
-        alert('Erreur de parsing CSV : ' + err.message);
-      }
-      e.target.value = '';
-    },
-    error: err => { alert('Erreur CSV : ' + err.message); e.target.value = ''; }
-  });
-});
+// (l'import CSV WebinarJam a ete retire le 10/08/2026 : depuis Welya, la presence
+//  arrive par dashboard-webinaires-sync/welya_sync.py, qui lit l'export .xlsx)
 
 // ============================================
 // COMPARAISONS
@@ -3303,7 +3248,8 @@ function renderFunnel() {
     ? `<div class="insight"><span class="insight-icon">🎯</span> <b>Diagnostic ${nomLive} :</b> ${rouges.map(r => `🔴 ${r.label} ${r.disp(latest)} → travailler ${LEVIERS[r.label] || 'ce point'}`).join(' · ')}</div>`
     : `<div class="insight"><span class="insight-icon">✅</span> <b>${nomLive} :</b> tous les seuils au vert</div>`;
 
-  // Show-up prévisionnel du prochain live (calculé par le robot WJ selon l'ancienneté des inscrits)
+  // Show-up prévisionnel du prochain live (hérité du robot WebinarJam, gelé depuis la bascule
+  // sur Welya : plus aucun live n'alimente showup_previsionnel, la carte reste donc masquée)
   const todayIso = new Date().toISOString().slice(0, 10);
   const prochain = ws.find(w => w.date >= todayIso && !(w.presents_pic > 0) && (w.showup_previsionnel || 0) > 0);
   const prevision = prochain
@@ -3332,7 +3278,7 @@ function renderFunnel() {
         </table>
       </div>
     </div>
-    <div class="insight"><span class="insight-icon">✦</span> CPL = spend Meta ÷ inscrits WJ (jamais le pixel). <b>Achats + CA</b> se remplissent en direct depuis Systeme.io (webhook) à chaque vente. Les lignes « à saisir » (clics lien live, taux de visionnage du live) se remplissent au formulaire.</div>
+    <div class="insight"><span class="insight-icon">✦</span> CPL = spend Meta ÷ inscrits réels, c'est-à-dire le total du tag Systeme.io, jamais le pixel ni le compteur Welya (Welya ne connaît que les gens entrés dans la salle : son « taux de participation » n'est pas un show-up). Inscrits et budget arrivent tout seuls ; présence, clics sur l'offre et drop-off arrivent par <b>welya_sync.py</b>, à lancer une fois après chaque live depuis l'export « Exporter les inscrits ». <b>Achats + CA</b> sont à saisir tant que le webhook de ventes n'écrit pas.</div>
   `;
 }
 
