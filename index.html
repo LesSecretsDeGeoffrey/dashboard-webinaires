@@ -3129,8 +3129,16 @@ function applyVentesAttribution(list) {
   });
 }
 
-// Prix de l'offre Méthode par live : 497 € jusqu'au 13/06, 697 € du 14/06 au 30/06, 297 € (test) à partir du 01/07
-function prixOffre(dateIso) { const d = dateIso || ''; return d >= '2026-07-01' ? 297 : (d >= '2026-06-14' ? 697 : 497); }
+// Prix de l'offre Méthode par live : 497 € jusqu'au 13/06 · 697 € du 14/06 au 30/06 ·
+// 297 € (prix de test V17/V18) du 01/07 au 25/07 · retour à 497 € depuis le 26/07 (Paris-Brest).
+// Sert de seuil au « Coût pub / vente » et au CA encaissé : à prolonger à chaque changement de prix.
+function prixOffre(dateIso) {
+  const d = dateIso || '';
+  if (d >= '2026-07-26') return 497;
+  if (d >= '2026-07-01') return 297;
+  if (d >= '2026-06-14') return 697;
+  return 497;
+}
 
 // Calculs funnel (null = donnée manquante → cellule neutre "—")
 const F = {
