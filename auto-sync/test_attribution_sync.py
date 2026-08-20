@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Tests des fonctions PURES d'attribution_sync.py. Aucun reseau, aucun secret."""
+import datetime
 import uuid
 import attribution_sync as a
 
@@ -176,3 +177,34 @@ def test_contacts_nouveaux_curseur():
     rows, dernier = a.contacts_nouveaux(depuis=None, sio_fn=fake_sio)
     assert [r["contact_id"] for r in rows] == ["1", "2", "3"]
     assert dernier == "3"
+
+
+def test_contacts_du_tag_pagine():
+    appels = []
+    lots = [
+        {"items": [{"id": 10, "email": "a@a.fr", "fields": [], "tags": []},
+                   {"id": 11, "email": "b@b.fr", "fields": [], "tags": []}], "hasMore": True},
+        {"items": [{"id": 12, "email": "c@c.fr", "fields": [], "tags": []}], "hasMore": False},
+    ]
+    def fake_sio(path, **p):
+        appels.append(p.get("startingAfter"))
+        return lots[len(appels) - 1]
+    rows = a.contacts_du_tag("atelier-0908", sio_fn=fake_sio)
+    assert [r["contact_id"] for r in rows] == ["10", "11", "12"]
+    assert appels[0] is None and appels[1] == "11"
+
+
+def test_tunnel_997_prime_sur_fondations():
+    assert a.tunnel_de(None, "Methode Fondations Pro 997") == "call"
+
+
+def test_faut_relire_contact():
+    assert a.faut_relire_contact([]) is True
+    assert a.faut_relire_contact([T("2026-08-01T10:00:00+00:00", typ="achat")]) is True
+    assert a.faut_relire_contact([T("2026-08-01T10:00:00+00:00", typ="achat"),
+                                  T("2026-08-02T10:00:00+00:00")]) is False
+
+
+def test_iso_fraction_courte():
+    d = a._iso("2026-08-09T21:30:00.12345+00:00")
+    assert d == datetime.datetime(2026, 8, 9, 21, 30, 0, 123450, tzinfo=datetime.timezone.utc)

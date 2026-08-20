@@ -28,6 +28,7 @@ le robot ecrit dans des tables protegees par RLS).
 import datetime
 import json
 import os
+import re
 import sys
 import urllib.error
 import urllib.parse
@@ -153,7 +154,11 @@ def _contact_jsonb(t):
 
 
 def _iso(ts):
-    return datetime.datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
+    """Postgres tronque les zeros finaux de la fraction de seconde ; py<3.11
+    exige que fromisoformat recoive 3 ou 6 chiffres. On pad a 6."""
+    s = str(ts).replace("Z", "+00:00")
+    s = re.sub(r"\.(\d{1,6})", lambda m: "." + m.group(1).ljust(6, "0"), s)
+    return datetime.datetime.fromisoformat(s)
 
 
 def attribuer(vente, touches, contact):
@@ -219,9 +224,13 @@ def achat_touche_id(vente_id):
 def _http_json(url, data=None, headers=None, method=None):
     req = urllib.request.Request(url, data=data, headers=headers or {"User-Agent": UA},
                                  method=method)
-    with urllib.request.urlopen(req, timeout=90) as r:
-        txt = r.read().decode()
-        return json.loads(txt) if txt else None
+    try:
+        with urllib.request.urlopen(req, timeout=90) as r:
+            txt = r.read().decode()
+            return json.loads(txt) if txt else None
+    except urllib.error.HTTPError as e:
+        raise RuntimeError("HTTP %s %s : %s" % (
+            e.code, url.split("?")[0], e.read().decode()[:300])) from e
 
 
 def sb(method, path, body=None, prefer=None):
@@ -392,6 +401,12 @@ def touches_de(email):
     return list(vues.values())
 
 
+def faut_relire_contact(touches):
+    """Passe (c) requise quand la personne n'a AUCUNE touche autre que l'achat
+    lui-meme (donc aucun utm connu localement)."""
+    return not [t for t in touches if t.get("type") != "achat"]
+
+
 def run_attribution(recalc=False, dry=False):
     ventes = sb_all("/rest/v1/ventes?select=id,email,montant,produit,purchased_at"
                     "&order=purchased_at")
@@ -401,29 +416,33 @@ def run_attribution(recalc=False, dry=False):
     print("Attribution : %d vente(s) a traiter / %d en base" % (len(a_faire), len(ventes)))
 
     for v in a_faire:
-        email = (v.get("email") or "").strip().lower()
-        touches = touches_de(email) if email else []
-        contact = None
-        if not [t for t in touches if t.get("type") != "achat"] and email:
-            contact = contact_par_email(email)          # passe (c)
-            if contact and not dry:
-                sb_upsert("contacts_sio", [ligne_contact(contact)], "contact_id")
-        row = attribuer(v, touches, contact)
-        print("  %s %s : %s / %s / %s" % (
-            str(v["purchased_at"])[:10], email or "(sans email)",
-            row["modele"], row["canal"] or "-", row["slug_crea"] or "-"))
-        if dry:
+        try:
+            email = (v.get("email") or "").strip().lower()
+            touches = touches_de(email) if email else []
+            contact = None
+            if email and faut_relire_contact(touches):
+                contact = contact_par_email(email)          # passe (c)
+                if contact and not dry:
+                    sb_upsert("contacts_sio", [ligne_contact(contact)], "contact_id")
+            row = attribuer(v, touches, contact)
+            print("  %s %s : %s / %s / %s" % (
+                str(v["purchased_at"])[:10], email or "(sans email)",
+                row["modele"], row["canal"] or "-", row["slug_crea"] or "-"))
+            if dry:
+                continue
+            sb_upsert("attribution", [row], "vente_id")
+            sb_upsert("touches", [{
+                "id": achat_touche_id(v["id"]), "vid": row["vid"],
+                "ts": v["purchased_at"], "type": "achat", "email": email or None,
+                "extra": {"vente_id": v["id"], "montant": v.get("montant"),
+                          "produit": v.get("produit")},
+            }], "id")
+            if row["vid"] and email:
+                sb_upsert("identites", [{"vid": row["vid"], "email": email,
+                                         "source": "vente"}], "vid,email")
+        except Exception as e:
+            print("  ERREUR vente %s : %s" % (v.get("id"), e))
             continue
-        sb_upsert("attribution", [row], "vente_id")
-        sb_upsert("touches", [{
-            "id": achat_touche_id(v["id"]), "vid": row["vid"],
-            "ts": v["purchased_at"], "type": "achat", "email": email or None,
-            "extra": {"vente_id": v["id"], "montant": v.get("montant"),
-                      "produit": v.get("produit")},
-        }], "id")
-        if row["vid"] and email:
-            sb_upsert("identites", [{"vid": row["vid"], "email": email,
-                                     "source": "vente"}], "vid,email")
 
 
 if __name__ == "__main__":
@@ -436,9 +455,15 @@ if __name__ == "__main__":
     if "--backfill" in sys.argv:
         backfill = sys.argv[sys.argv.index("--backfill") + 1]
     if META_TOKEN and "--skip-meta" not in sys.argv:
-        run_depenses(dry=dry, backfill=backfill)
+        try:
+            run_depenses(dry=dry, backfill=backfill)
+        except Exception as e:
+            print("Meta skip (%s)" % str(e)[:200])
     else:
         print("Meta : saute (META_TOKEN absent ou --skip-meta)")
-    run_contacts(dry=dry)
+    try:
+        run_contacts(dry=dry)
+    except Exception as e:
+        print("SIO contacts skip (%s)" % str(e)[:200])
     run_attribution(recalc="--recalc" in sys.argv, dry=dry)
     print("DONE" + (" (dry-run, rien ecrit)" if dry else ""))

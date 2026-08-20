@@ -131,12 +131,12 @@ create table if not exists public.capi_envois (
 create or replace function public.canal_de(src text, med text) returns text
 language sql immutable as $$
   select case
-    when lower(coalesce(med,'')) = 'paid'
-      or lower(coalesce(src,'')) in ('fb','ig','facebook','instagram','an','msg','meta','ads')
+    when lower(trim(coalesce(med,''))) = 'paid'
+      or lower(trim(coalesce(src,''))) in ('fb','ig','facebook','instagram','an','msg','meta','ads')
       then 'ads'
-    when lower(coalesce(src,'')) in ('manychat','email','story','bio','whatsapp')
+    when lower(trim(coalesce(src,''))) in ('manychat','email','story','bio','whatsapp')
       then lower(src)
-    when lower(coalesce(med,'')) = 'lien' then 'lien'
+    when lower(trim(coalesce(med,''))) = 'lien' then 'lien'
     else 'organique'
   end
 $$;
