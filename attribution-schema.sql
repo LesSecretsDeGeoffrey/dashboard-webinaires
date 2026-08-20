@@ -259,7 +259,7 @@ $$;
 -- Compteur de clics d'un lien court (increment atomique)
 create or replace function public.clic_lien(p_slug text) returns void
 language sql as $$
-  update public.liens set clics = clics + 1 where slug = p_slug;
+  update public.liens set clics = coalesce(clics, 0) + 1 where slug = p_slug;
 $$;
 
 -- Ces deux fonctions ECRIVENT : reservees a la cle service (Cloudflare Pages).
@@ -276,9 +276,9 @@ grant execute on function public.clic_lien(text) to service_role;
 create or replace function public.tunnel_de_path(p text) returns text
 language sql immutable as $$
   select case
-    when p like '%/paiementfondationspro%' or p like '%/live2%' then 'live'
-    when p like '%/paiementbook%' or p like '%/maitrise%'       then 'ebook'
-    when p like '%/paiementmethode997%'                         then 'call'
+    when lower(p) like '%/paiementfondationspro%' or lower(p) like '%/live2%' then 'live'
+    when lower(p) like '%/paiementbook%' or lower(p) like '%/maitrise%'       then 'ebook'
+    when lower(p) like '%/paiementmethode997%'                                then 'call'
     else 'autre'
   end
 $$;
