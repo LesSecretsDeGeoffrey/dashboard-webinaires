@@ -239,6 +239,69 @@ select contact_id, tags, utm_term, utm_content,
 from public.contacts_sio;
 
 -- ============================================================
+-- PHASE 2 : fonctions appelees par Cloudflare Pages + vues ecrans.
+-- Rejouer le fichier ENTIER (idempotent, comme en phase 1).
+-- ============================================================
+
+-- Upsert atomique du visiteur : premier_contact FIGE au premier passage,
+-- last_seen rafraichi ensuite (2 requetes REST seraient une course).
+create or replace function public.upsert_visiteur(
+  p_vid text, p_premier jsonb, p_pays text, p_device text) returns void
+language sql as $$
+  insert into public.visiteurs (vid, first_seen, last_seen, premier_contact, pays, device)
+  values (p_vid, now(), now(), p_premier, p_pays, p_device)
+  on conflict (vid) do update
+    set last_seen = now(),
+        pays   = coalesce(public.visiteurs.pays,   excluded.pays),
+        device = coalesce(public.visiteurs.device, excluded.device);
+$$;
+
+-- Compteur de clics d'un lien court (increment atomique)
+create or replace function public.clic_lien(p_slug text) returns void
+language sql as $$
+  update public.liens set clics = clics + 1 where slug = p_slug;
+$$;
+
+-- Ces deux fonctions ECRIVENT : reservees a la cle service (Cloudflare Pages).
+-- Sans ce revoke, la cle publishable du front pourrait les appeler.
+revoke execute on function public.upsert_visiteur(text, jsonb, text, text)
+  from public, anon, authenticated;
+revoke execute on function public.clic_lien(text) from public, anon, authenticated;
+grant execute on function public.upsert_visiteur(text, jsonb, text, text) to service_role;
+grant execute on function public.clic_lien(text) to service_role;
+
+-- Tunnel d'un path (ecran Tunnels). SURENSEMBLE des fragments TUNNELS_PATH
+-- d'attribution_sync.py (test de parite pytest : le SQL peut en savoir plus,
+-- jamais moins). Les paths inconnus restent visibles en 'autre'.
+create or replace function public.tunnel_de_path(p text) returns text
+language sql immutable as $$
+  select case
+    when p like '%/paiementfondationspro%' or p like '%/live2%' then 'live'
+    when p like '%/paiementbook%' or p like '%/maitrise%'       then 'ebook'
+    when p like '%/paiementmethode997%'                         then 'call'
+    else 'autre'
+  end
+$$;
+
+-- Ecran Tunnels : personnes distinctes (vid) par path, par tunnel
+create or replace view public.v_tunnel_etapes as
+select public.tunnel_de_path(path) as tunnel, path,
+       count(distinct vid) as personnes, count(*) as vues
+from public.touches
+where type = 'pageview' and path is not null and vid is not null
+group by 1, 2;
+
+-- Ecran Canaux : clics de liens courts par canal et par jour
+create or replace view public.v_clics_liens as
+select (t.ts at time zone 'Europe/Paris')::date as date,
+       coalesce(l.canal, 'autre') as canal,
+       count(*) as clics
+from public.touches t
+left join public.liens l on l.slug = t.slug
+where t.type = 'click_go'
+group by 1, 2;
+
+-- ============================================================
 -- VERIFICATION (a executer apres, doit rendre des lignes sans erreur)
 -- ============================================================
 -- select public.canal_de('fb', null);            -- 'ads'
@@ -247,3 +310,8 @@ from public.contacts_sio;
 -- select public.canal_de(null, null);            -- 'organique'
 -- select * from public.v_pubs limit 1;
 -- select * from public.v_canaux limit 5;
+-- select public.tunnel_de_path('/paiementbook-direct');  -- 'ebook'
+-- select public.tunnel_de_path('/live2');                -- 'live'
+-- select * from public.v_tunnel_etapes limit 5;
+-- select * from public.v_clics_liens limit 5;
+-- select public.clic_lien('slug-inexistant');            -- rend void, 0 ligne touchee

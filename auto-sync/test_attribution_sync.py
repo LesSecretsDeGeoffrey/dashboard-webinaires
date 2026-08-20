@@ -227,3 +227,17 @@ def test_contact_par_email_limit_api():
         return {"items": [{"id": 7, "email": "x@y.fr"}]}
     c = a.contact_par_email("x@y.fr", sio_fn=fake_sio)
     assert c["id"] == 7 and vus["email"] == "x@y.fr"
+
+
+def test_tunnel_fragments_presents_dans_le_sql():
+    """Phase 2 : chaque fragment de TUNNELS_PATH doit exister dans la fonction
+    SQL tunnel_de_path (ecran Tunnels). Le SQL peut en connaitre PLUS (pages
+    d'optin comme /live2), jamais MOINS — meme discipline que canal_de."""
+    sql = open(a.SCHEMA_PATH, encoding="utf-8").read().lower()
+    assert "tunnel_de_path" in sql
+    for frag, _ in a.TUNNELS_PATH:
+        assert frag in sql, f"{frag} absent de tunnel_de_path"
+    for vue in ("v_tunnel_etapes", "v_clics_liens"):
+        assert vue in sql, f"vue {vue} absente du schema"
+    for fn in ("upsert_visiteur", "clic_lien"):
+        assert fn in sql, f"fonction {fn} absente du schema"
