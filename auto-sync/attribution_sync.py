@@ -375,3 +375,70 @@ def run_contacts(dry=False):
         for r in rows:
             vus[r["contact_id"]] = r
         sb_upsert("contacts_sio", list(vus.values()), "contact_id")
+
+
+def touches_de(email):
+    """Toutes les touches de la personne : email -> vids (identites) -> touches,
+    plus les touches portant directement l'email."""
+    vids = [r["vid"] for r in
+            (sb("GET", "/rest/v1/identites?email=eq.%s&select=vid" % urllib.parse.quote(email)) or [])]
+    touches = list(sb("GET", "/rest/v1/touches?email=eq.%s&select=*" % urllib.parse.quote(email)) or [])
+    if vids:
+        q = ",".join('"%s"' % v for v in vids)
+        touches += sb("GET", "/rest/v1/touches?vid=in.(%s)&select=*" % urllib.parse.quote(q)) or []
+    vues = {}
+    for t in touches:
+        vues[t["id"]] = t
+    return list(vues.values())
+
+
+def run_attribution(recalc=False, dry=False):
+    ventes = sb_all("/rest/v1/ventes?select=id,email,montant,produit,purchased_at"
+                    "&order=purchased_at")
+    deja = set() if recalc else {r["vente_id"] for r in
+                                 sb_all("/rest/v1/attribution?select=vente_id&order=vente_id")}
+    a_faire = [v for v in ventes if v["id"] not in deja]
+    print("Attribution : %d vente(s) a traiter / %d en base" % (len(a_faire), len(ventes)))
+
+    for v in a_faire:
+        email = (v.get("email") or "").strip().lower()
+        touches = touches_de(email) if email else []
+        contact = None
+        if not [t for t in touches if t.get("type") != "achat"] and email:
+            contact = contact_par_email(email)          # passe (c)
+            if contact and not dry:
+                sb_upsert("contacts_sio", [ligne_contact(contact)], "contact_id")
+        row = attribuer(v, touches, contact)
+        print("  %s %s : %s / %s / %s" % (
+            str(v["purchased_at"])[:10], email or "(sans email)",
+            row["modele"], row["canal"] or "-", row["slug_crea"] or "-"))
+        if dry:
+            continue
+        sb_upsert("attribution", [row], "vente_id")
+        sb_upsert("touches", [{
+            "id": achat_touche_id(v["id"]), "vid": row["vid"],
+            "ts": v["purchased_at"], "type": "achat", "email": email or None,
+            "extra": {"vente_id": v["id"], "montant": v.get("montant"),
+                      "produit": v.get("produit")},
+        }], "id")
+        if row["vid"] and email:
+            sb_upsert("identites", [{"vid": row["vid"], "email": email,
+                                     "source": "vente"}], "vid,email")
+
+
+if __name__ == "__main__":
+    dry = "--dry-run" in sys.argv
+    if not SERVICE_KEY:
+        sys.exit("SUPABASE_SERVICE_KEY manquant (le robot ecrit, la publishable ne suffit pas)")
+    if not SYSTEME_API_KEY:
+        sys.exit("SYSTEME_API_KEY manquant")
+    backfill = None
+    if "--backfill" in sys.argv:
+        backfill = sys.argv[sys.argv.index("--backfill") + 1]
+    if META_TOKEN and "--skip-meta" not in sys.argv:
+        run_depenses(dry=dry, backfill=backfill)
+    else:
+        print("Meta : saute (META_TOKEN absent ou --skip-meta)")
+    run_contacts(dry=dry)
+    run_attribution(recalc="--recalc" in sys.argv, dry=dry)
+    print("DONE" + (" (dry-run, rien ecrit)" if dry else ""))
