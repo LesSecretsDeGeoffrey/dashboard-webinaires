@@ -135,7 +135,7 @@ language sql immutable as $$
       or lower(trim(coalesce(src,''))) in ('fb','ig','facebook','instagram','an','msg','meta','ads')
       then 'ads'
     when lower(trim(coalesce(src,''))) in ('manychat','email','story','bio','whatsapp')
-      then lower(src)
+      then lower(trim(src))
     when lower(trim(coalesce(med,''))) = 'lien' then 'lien'
     else 'organique'
   end

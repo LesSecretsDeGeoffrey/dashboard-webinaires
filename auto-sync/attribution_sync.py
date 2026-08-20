@@ -454,16 +454,23 @@ if __name__ == "__main__":
     backfill = None
     if "--backfill" in sys.argv:
         backfill = sys.argv[sys.argv.index("--backfill") + 1]
+    echecs = []
     if META_TOKEN and "--skip-meta" not in sys.argv:
         try:
             run_depenses(dry=dry, backfill=backfill)
         except Exception as e:
             print("Meta skip (%s)" % str(e)[:200])
+            echecs.append("depenses")
     else:
         print("Meta : saute (META_TOKEN absent ou --skip-meta)")
     try:
         run_contacts(dry=dry)
     except Exception as e:
         print("SIO contacts skip (%s)" % str(e)[:200])
+        echecs.append("contacts")
     run_attribution(recalc="--recalc" in sys.argv, dry=dry)
     print("DONE" + (" (dry-run, rien ecrit)" if dry else ""))
+    if echecs:
+        # le job GitHub Actions doit passer ROUGE : une etape sautee en continu
+        # serait une degradation silencieuse (mail d'echec = seule alerte)
+        sys.exit("etapes en echec : " + ", ".join(echecs))
