@@ -155,7 +155,7 @@ function bornes() {
   if (!filtre.j) return ['2000-01-01', '2100-01-01'];
   return [addJ(iso(new Date()), -filtre.j), iso(new Date())];
 }
-function iso(d) { return d.toISOString().slice(0, 10); }
+function iso(d) { return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' }); }
 function addJ(s, n) { const d = new Date(s + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return iso(d); }
 const fmt = (n, d = 0) => (Number(n) || 0).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
 const cle = (slug, adset) => (((slug || '').trim() || '?')) + '|' + (((adset || '').trim() || '?'));
@@ -261,8 +261,8 @@ document.getElementById('selLive').onchange = async e => {
     // inscrits du live = contacts PORTANT LE TAG (regle /cpl), via la vue
     // v_contacts_pub (le canal y est deja calcule par canal_de en SQL)
     const cts = await q('v_contacts_pub?tags=cs.{' + tag + '}&select=utm_term,utm_content,canal');
-    inscritsLive = { pubs: {}, canaux: {} };
     if (filtre.live !== live) return;   // une autre selection a pris le relais
+    inscritsLive = { pubs: {}, canaux: {} };
     cts.forEach(ct => {
       if (ct.utm_content) {
         const k = cle(ct.utm_content, ct.utm_term);
