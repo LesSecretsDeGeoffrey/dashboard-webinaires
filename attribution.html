@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>LSG · Attribution</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --or: #C8A04A; --or-clair: #E0BE6B; --sombre: #1A1410; --sombre-2: #2A1F18;
+  --sombre-3: #3A2D22; --creme: #FDF8F0; --gris-mute: #807060; --rouge: #B33A2A;
+  --vert: #5C8C5A; --or-trans: rgba(200,160,74,0.15); --creme-trans: rgba(253,248,240,0.05);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: var(--sombre); color: var(--creme); font-family: 'Inter', sans-serif; font-size: 14px; }
+a { color: var(--or); text-decoration: none; }
+.top { display: flex; align-items: center; gap: 12px; padding: 14px 16px; border-bottom: 1px solid var(--or-trans); flex-wrap: wrap; }
+.top h1 { font-family: 'Cormorant Garamond', serif; font-size: 26px; color: var(--or); }
+.filtres { display: flex; gap: 8px; flex-wrap: wrap; padding: 12px 16px; }
+.fbtn { background: var(--sombre-2); color: var(--creme); border: 1px solid var(--or-trans); border-radius: 8px; padding: 7px 13px; cursor: pointer; font-size: 13px; }
+.fbtn.on { background: var(--or); color: var(--sombre); font-weight: 600; }
+select, input[type=date] { background: var(--sombre-2); color: var(--creme); border: 1px solid var(--or-trans); border-radius: 8px; padding: 7px 10px; }
+.wrap { padding: 0 16px 40px; max-width: 1100px; margin: 0 auto; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 12px 0 20px; }
+.kpi { background: var(--sombre-2); border: 1px solid var(--or-trans); border-radius: 12px; padding: 14px; }
+.kpi b { display: block; font-size: 22px; color: var(--or-clair); }
+.kpi span { color: var(--gris-mute); font-size: 12px; }
+h2 { font-family: 'Cormorant Garamond', serif; color: var(--or); font-size: 21px; margin: 22px 0 10px; }
+.scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; min-width: 720px; }
+th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--creme-trans); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { color: var(--gris-mute); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; cursor: pointer; }
+tr.total td { border-top: 2px solid var(--or-trans); font-weight: 700; color: var(--or-clair); }
+.bad { color: var(--rouge); } .good { color: var(--vert); }
+.note { color: var(--gris-mute); font-size: 12px; margin: 8px 0 0; }
+#auth { position: fixed; inset: 0; background: var(--sombre); display: flex; align-items: center; justify-content: center; z-index: 10; }
+#auth.hidden { display: none; }
+#auth .box { background: var(--sombre-2); border: 1px solid var(--or-trans); border-radius: 14px; padding: 28px; width: 300px; text-align: center; }
+#auth input { width: 100%; margin: 14px 0 10px; text-align: center; font-size: 18px; }
+#auth button { width: 100%; background: var(--or); border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body>
+
+<div id="auth"><div class="box">
+  <h1 style="font-family:'Cormorant Garamond',serif;color:var(--or)">Attribution</h1>
+  <input type="password" id="authPwd" placeholder="••••" autocomplete="current-password">
+  <button id="authGo">Entrer</button>
+</div></div>
+
+<div class="top">
+  <h1>Attribution</h1>
+  <a href="index.html">← Dashboard</a>
+</div>
+
+<div class="filtres">
+  <button class="fbtn on" data-j="7">7 j</button>
+  <button class="fbtn" data-j="30">30 j</button>
+  <button class="fbtn" data-j="90">90 j</button>
+  <button class="fbtn" data-j="0">Tout</button>
+  <select id="selLive"><option value="">Par live…</option></select>
+  <select id="selTunnel"><option value="">Tous les tunnels</option></select>
+</div>
+
+<div class="wrap">
+  <div class="kpis" id="kpis"></div>
+
+  <h2>Par pub (créa × adset)</h2>
+  <p class="note">Modèle : dernier contact payant, sinon premier contact, sinon champs du contact
+  Systeme.io. Le filtre tunnel recompte ventes et CA depuis l'attribution ; la dépense et les
+  inscrits restent tous tunnels (Meta et les contacts ne sont pas segmentables par tunnel).
+  Filtre « live » : inscrits comptés par appartenance au tag du live, comme /cpl</p>
+  <div class="scroll"><table id="tblPubs"></table></div>
+
+  <h2>Par canal</h2>
+  <p class="note">Canal du DERNIER contact avant l'achat, tous canaux (pas le modèle) — un acheteur
+  venu d'une pub puis converti par un email compte ici « email »</p>
+  <div class="scroll"><table id="tblCanaux"></table></div>
+</div>
+
+<script>
+const SB = { url: 'https://mxnrqnpvcxwdwykzzchk.supabase.co',
+             key: 'sb_publishable_f_MKNNQu-CG7LqW3Bs0sUA_TIU2fBUf' };
+const H = { 'apikey': SB.key, 'Authorization': 'Bearer ' + SB.key };
+
+// --- auth : meme cookie que index.html ---
+const AUTH_PASSWORD = '6688', AUTH_COOKIE = 'sdg_dashboard_auth', AUTH_TOKEN = 'lsg-dash-ok-v2';
+function isAuth() { return document.cookie.split(';').some(c => c.trim().startsWith(AUTH_COOKIE + '=' + AUTH_TOKEN)); }
+function setAuth() { const d = new Date(); d.setTime(d.getTime() + 30 * 864e5);
+  document.cookie = AUTH_COOKIE + '=' + AUTH_TOKEN + '; expires=' + d.toUTCString() + '; path=/; SameSite=Lax'; }
+document.getElementById('authGo').onclick = tryAuth;
+document.getElementById('authPwd').addEventListener('keydown', e => { if (e.key === 'Enter') tryAuth(); });
+function tryAuth() {
+  if (document.getElementById('authPwd').value === AUTH_PASSWORD) { setAuth(); boot(); }
+  else document.getElementById('authPwd').value = '';
+}
+
+// --- data ---
+let pubsJour = [], canauxV = [], canauxI = [], attribs = [], webinaires = [], lives = {};
+let inscritsLive = null;   // rempli quand un live est choisi : comptes par TAG (regle /cpl)
+let filtre = { j: 7, live: '', tunnel: '' };
+
+async function q(path) {
+  // pagination : Supabase plafonne chaque reponse a 1000 lignes
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const r = await fetch(SB.url + '/rest/v1/' + path, {
+      headers: { ...H, 'Range': from + '-' + (from + 999) } });
+    if (!r.ok) break;
+    const lot = await r.json();
+    out.push(...lot);
+    if (lot.length < 1000) break;
+  }
+  return out;
+}
+
+async function boot() {
+  document.getElementById('auth').classList.add('hidden');
+  [pubsJour, canauxV, canauxI, attribs, webinaires, lives] = await Promise.all([
+    q('v_pubs?select=*&order=date'),
+    q('v_canaux?select=*'),
+    q('v_canaux_inscrits?select=*'),
+    // la date et le montant viennent de la vente jointe (FK vente_id -> ventes)
+    q('attribution?select=canal,canal_dernier,tunnel,slug_crea,adset_name,modele,ventes(purchased_at,montant)'),
+    q('webinaires?select=date&order=date'),
+    fetch('auto-sync/lives.json').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+  ]);
+  attribs.forEach(x => {
+    const ts = (x.ventes || {}).purchased_at;
+    // jour en heure de PARIS, comme les vues SQL (sv-SE rend AAAA-MM-JJ)
+    x.date = ts ? new Date(ts).toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' }) : '';
+    x.montant = Number((x.ventes || {}).montant || 0);
+  });
+  const selL = document.getElementById('selLive');
+  webinaires.forEach(w => selL.add(new Option('Live ' + w.date, w.date)));
+  const selT = document.getElementById('selTunnel');
+  [...new Set(attribs.map(x => x.tunnel).filter(Boolean))].sort()
+    .forEach(t => selT.add(new Option(t, t)));
+  render();
+}
+
+function bornes() {
+  // live choisi = lendemain du live precedent -> jour du live, pour la DEPENSE
+  // et les VENTES ; les INSCRITS du live viennent du TAG (inscritsLive)
+  if (filtre.live) {
+    const dates = webinaires.map(w => w.date).sort();
+    const i = dates.indexOf(filtre.live);
+    const lo = i > 0 ? addJ(dates[i - 1], 1) : addJ(filtre.live, -10);
+    return [lo, filtre.live];
+  }
+  if (!filtre.j) return ['2000-01-01', '2100-01-01'];
+  return [addJ(iso(new Date()), -filtre.j), iso(new Date())];
+}
+function iso(d) { return d.toISOString().slice(0, 10); }
+function addJ(s, n) { const d = new Date(s + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return iso(d); }
+const fmt = (n, d = 0) => (Number(n) || 0).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const cle = (slug, adset) => (((slug || '').trim() || '?')) + '|' + (((adset || '').trim() || '?'));
+
+function render() {
+  const [lo, hi] = bornes();
+  const dedans = r => r.date >= lo && r.date <= hi;
+  const attribsPeriode = attribs.filter(dedans);
+  const attribsFiltres = filtre.tunnel
+    ? attribsPeriode.filter(x => x.tunnel === filtre.tunnel) : attribsPeriode;
+
+  // agregat pubs sur la periode (depense/inscrits par jour depuis v_pubs)
+  const pubs = {};
+  pubsJour.filter(dedans).forEach(r => {
+    const k = cle(r.slug_crea, r.adset_name);
+    const p = pubs[k] || (pubs[k] = { slug: r.slug_crea, adset: r.adset_name,
+      spend: 0, inscrits: 0, ventes: 0, ca: 0 });
+    p.spend += +r.spend; p.inscrits += +r.inscrits; p.ventes += +r.ventes; p.ca += +r.ca;
+  });
+  // filtre live : les inscrits par pub viennent de l'APPARTENANCE AU TAG (regle /cpl)
+  if (filtre.live && inscritsLive) {
+    Object.values(pubs).forEach(p => { p.inscrits = 0; });
+    Object.entries(inscritsLive.pubs).forEach(([k, n]) => {
+      const p = pubs[k] || (pubs[k] = { slug: k.split('|')[0], adset: k.split('|')[1],
+        spend: 0, inscrits: 0, ventes: 0, ca: 0 });
+      p.inscrits = n;
+    });
+  }
+  // filtre tunnel : ventes/CA recomptes depuis attribution (avec date + montant)
+  if (filtre.tunnel) {
+    Object.values(pubs).forEach(p => { p.ventes = 0; p.ca = 0; });
+    attribsFiltres.filter(x => x.slug_crea).forEach(x => {
+      const k = cle(x.slug_crea, x.adset_name);
+      const p = pubs[k] || (pubs[k] = { slug: x.slug_crea, adset: x.adset_name || '?',
+        spend: 0, inscrits: 0, ventes: 0, ca: 0 });
+      p.ventes += 1; p.ca += x.montant;
+    });
+  }
+  const rows = Object.values(pubs).sort((a, b) => b.spend - a.spend);
+  const nonAttr = attribsFiltres.filter(x => !x.slug_crea).length;
+
+  const t = ['<tr><th>Créa</th><th>Adset</th><th>Dépense</th><th>Inscrits</th><th>€/inscrit</th><th>Ventes</th><th>CA</th><th>€/vente</th><th>ROAS</th></tr>'];
+  const tot = { spend: 0, inscrits: 0, ventes: 0, ca: 0 };
+  rows.forEach(p => {
+    tot.spend += p.spend; tot.inscrits += p.inscrits; tot.ventes += p.ventes; tot.ca += p.ca;
+    t.push(ligne(p.slug, p.adset, p));
+  });
+  t.push(ligne('TOTAL', '', tot, 'total'));
+  if (nonAttr) t.push('<tr><td colspan="9" class="note">' + nonAttr +
+    ' vente(s) de la période non attribuée(s) à une pub (organique, canal direct ou modèle « aucune »)</td></tr>');
+  document.getElementById('tblPubs').innerHTML = t.join('');
+
+  // canaux : ventes par canal_dernier ; recomptees depuis attribution si filtre tunnel
+  const cv = {}, ci = {};
+  if (filtre.tunnel) {
+    attribsFiltres.forEach(x => {
+      const k = x.canal_dernier || 'non attribue';   // meme graphie que v_canaux (SQL)
+      const c = cv[k] || (cv[k] = { v: 0, ca: 0 }); c.v += 1; c.ca += x.montant;
+    });
+  } else {
+    canauxV.filter(dedans).forEach(r => { const c = cv[r.canal] || (cv[r.canal] = { v: 0, ca: 0 });
+      c.v += +r.ventes; c.ca += +r.ca; });
+  }
+  if (filtre.live && inscritsLive) {
+    Object.assign(ci, inscritsLive.canaux);
+  } else {
+    canauxI.filter(dedans).forEach(r => { ci[r.canal] = (ci[r.canal] || 0) + +r.inscrits; });
+  }
+  const cs = [...new Set([...Object.keys(cv), ...Object.keys(ci)])].sort();
+  const c = ['<tr><th>Canal</th><th>Inscrits</th><th>Ventes</th><th>CA</th></tr>'];
+  cs.forEach(k => c.push('<tr><td>' + k + '</td><td>' + fmt(ci[k] || 0) + '</td><td>' +
+    fmt((cv[k] || {}).v || 0) + '</td><td>' + fmt((cv[k] || {}).ca || 0) + ' €</td></tr>'));
+  document.getElementById('tblCanaux').innerHTML = c.join('');
+
+  // KPIs
+  document.getElementById('kpis').innerHTML =
+    kpi(fmt(tot.spend) + ' €', 'Dépense') + kpi(fmt(tot.inscrits), 'Inscrits') +
+    kpi(fmt(tot.ventes), 'Ventes') + kpi(fmt(tot.ca) + ' €', 'CA attribué pubs') +
+    kpi(tot.ventes && tot.spend ? fmt(tot.spend / tot.ventes) + ' €' : '—', 'Coût / vente') +
+    kpi(tot.spend ? (tot.ca / tot.spend).toFixed(2) : '—', 'ROAS');
+}
+function kpi(v, l) { return '<div class="kpi"><b>' + v + '</b><span>' + l + '</span></div>'; }
+function ligne(a1, a2, p, cls) {
+  const cpv = p.ventes && p.spend ? fmt(p.spend / p.ventes) + ' €' : '—';
+  const roas = p.spend ? (p.ca / p.spend).toFixed(2) : '—';
+  const cpi = p.inscrits && p.spend ? fmt(p.spend / p.inscrits, 2) + ' €' : '—';
+  return '<tr class="' + (cls || '') + '"><td>' + a1 + '</td><td>' + (a2 || '') + '</td><td>' +
+    fmt(p.spend) + ' €</td><td>' + fmt(p.inscrits) + '</td><td>' + cpi + '</td><td>' +
+    fmt(p.ventes) + '</td><td>' + fmt(p.ca) + ' €</td><td>' + cpv + '</td><td>' + roas + '</td></tr>';
+}
+
+// filtres
+document.querySelectorAll('.fbtn').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.fbtn').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); filtre.j = +b.dataset.j; filtre.live = ''; inscritsLive = null;
+  document.getElementById('selLive').value = ''; render();
+});
+document.getElementById('selLive').onchange = async e => {
+  filtre.live = e.target.value; inscritsLive = null;
+  const live = filtre.live;      // garde anti-course si deux selections rapides
+  const tag = (lives[filtre.live] || {}).tag;
+  if (filtre.live && tag) {
+    // inscrits du live = contacts PORTANT LE TAG (regle /cpl), via la vue
+    // v_contacts_pub (le canal y est deja calcule par canal_de en SQL)
+    const cts = await q('v_contacts_pub?tags=cs.{' + tag + '}&select=utm_term,utm_content,canal');
+    inscritsLive = { pubs: {}, canaux: {} };
+    if (filtre.live !== live) return;   // une autre selection a pris le relais
+    cts.forEach(ct => {
+      if (ct.utm_content) {
+        const k = cle(ct.utm_content, ct.utm_term);
+        inscritsLive.pubs[k] = (inscritsLive.pubs[k] || 0) + 1;
+      }
+      inscritsLive.canaux[ct.canal] = (inscritsLive.canaux[ct.canal] || 0) + 1;
+    });
+  }
+  if (filtre.live === live) render();
+};
+document.getElementById('selTunnel').onchange = e => { filtre.tunnel = e.target.value; render(); };
+
+if (isAuth()) boot();
+</script>
+</body>
+</html>

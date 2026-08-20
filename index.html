@@ -1180,6 +1180,7 @@ tr.clickable { cursor: pointer; }
       <li><a data-page="webinaires"><span class="nav-icon">🎯</span><span>Webinaires</span></a></li>
       <li><a data-page="comparaisons"><span class="nav-icon">🔄</span><span>Comparaisons</span></a></li>
       <li><a data-page="funnel"><span class="nav-icon">📈</span><span>Stats</span></a></li>
+      <li><a href="attribution.html"><span class="nav-icon">🎯</span><span>Attribution</span></a></li>
       <li><a data-page="dm"><span class="nav-icon">💬</span><span>DM Tracking</span></a></li>
       <li><a data-page="objections"><span class="nav-icon">❓</span><span>Objections</span></a></li>
       <li><a data-page="rapports"><span class="nav-icon">📄</span><span>Rapports</span></a></li>
@@ -2143,6 +2144,7 @@ function showToast(msg) {
 // ============================================
 document.querySelectorAll('.nav a').forEach(link => {
   link.addEventListener('click', e => {
+    if (!link.dataset.page) return;   // lien externe (attribution.html) : laisser naviguer
     e.preventDefault();
     document.querySelectorAll('.nav a').forEach(l => l.classList.remove('active'));
     link.classList.add('active');
