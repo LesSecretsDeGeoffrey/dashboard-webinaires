@@ -212,3 +212,77 @@ def attribuer(vente, touches, contact):
 
 def achat_touche_id(vente_id):
     return str(uuid.uuid5(NS_ACHAT, str(vente_id)))
+
+
+# ---------------------------------------------------------------- I/O
+
+def _http_json(url, data=None, headers=None, method=None):
+    req = urllib.request.Request(url, data=data, headers=headers or {"User-Agent": UA},
+                                 method=method)
+    with urllib.request.urlopen(req, timeout=90) as r:
+        txt = r.read().decode()
+        return json.loads(txt) if txt else None
+
+
+def sb(method, path, body=None, prefer=None):
+    """Supabase REST avec la CLE SERVICE (le robot ecrit ; RLS contournee)."""
+    headers = {"apikey": SERVICE_KEY, "Authorization": "Bearer " + SERVICE_KEY,
+               "Content-Type": "application/json", "User-Agent": UA}
+    if prefer:
+        headers["Prefer"] = prefer
+    return _http_json(SUPABASE_URL + path,
+                      data=json.dumps(body).encode() if body is not None else None,
+                      headers=headers, method=method)
+
+
+def sb_upsert(table, rows, conflict):
+    for i in range(0, len(rows), 500):
+        sb("POST", "/rest/v1/%s?on_conflict=%s" % (table, conflict), rows[i:i + 500],
+           prefer="resolution=merge-duplicates,return=minimal")
+
+
+def sio(path, **params):
+    url = "https://api.systeme.io/api/" + path + \
+          ("?" + urllib.parse.urlencode(params) if params else "")
+    return _http_json(url, headers={"X-API-Key": SYSTEME_API_KEY, "User-Agent": UA})
+
+
+def meta_depenses(since, until, fetch=None):
+    """Insights level=ad, une ligne par pub PAR JOUR, avec pagination."""
+    fetch = fetch or _http_json
+    url = "https://graph.facebook.com/v25.0/act_%s/insights?%s" % (META_ACCOUNT, urllib.parse.urlencode({
+        "level": "ad", "time_increment": 1, "limit": 200,
+        "fields": "ad_id,ad_name,adset_id,adset_name,campaign_id,campaign_name,"
+                  "spend,impressions,clicks",
+        "time_range": json.dumps({"since": since, "until": until}),
+        "access_token": META_TOKEN,
+    }))
+    rows = []
+    while url:
+        d = fetch(url)
+        rows += [ligne_depense(r) for r in d.get("data", [])]
+        url = (d.get("paging") or {}).get("next")
+    return rows
+
+
+def sb_all(path):
+    """GET pagine : Supabase plafonne chaque reponse a 1000 lignes."""
+    out, pas = [], 1000
+    sep = "&" if "?" in path else "?"
+    for offset in range(0, 10_000_000, pas):
+        lot = sb("GET", "%s%soffset=%d&limit=%d" % (path, sep, offset, pas)) or []
+        out += lot
+        if len(lot) < pas:
+            return out
+
+
+def run_depenses(dry=False, backfill=None):
+    """J-3 -> J a chaque passage (Meta corrige ses chiffres 3 jours).
+    backfill='AAAA-MM-JJ' (one-shot, a la main) : repart de cette date pour
+    donner au ROAS historique sa depense."""
+    today = datetime.date.today()
+    since = backfill or (today - datetime.timedelta(days=3)).isoformat()
+    rows = meta_depenses(since, today.isoformat())
+    print("Meta : %d lignes pub/jour (%s -> %s)" % (len(rows), since, today))
+    if rows and not dry:
+        sb_upsert("depenses_ads", rows, "date,ad_id")

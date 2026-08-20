@@ -149,3 +149,18 @@ def test_touche_achat_id_deterministe():
     i1 = a.achat_touche_id(VENTE["id"])
     i2 = a.achat_touche_id(VENTE["id"])
     assert i1 == i2 and str(uuid.UUID(i1)) == i1
+
+
+def test_meta_depenses_pagine():
+    pages = [
+        {"data": [{"date_start": "2026-08-18", "ad_id": "1", "ad_name": "s1 | A | 0208", "spend": "1"}],
+         "paging": {"next": "https://graph.facebook.com/page2"}},
+        {"data": [{"date_start": "2026-08-18", "ad_id": "2", "ad_name": "s2 | A | 0208", "spend": "2"}]},
+    ]
+    vus = []
+    def fake_fetch(url):
+        vus.append(url)
+        return pages[len(vus) - 1]
+    rows = a.meta_depenses("2026-08-15", "2026-08-18", fetch=fake_fetch)
+    assert [r["ad_id"] for r in rows] == ["1", "2"]
+    assert "level" in vus[0] and vus[1] == "https://graph.facebook.com/page2"
