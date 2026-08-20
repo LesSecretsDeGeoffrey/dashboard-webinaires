@@ -164,3 +164,15 @@ def test_meta_depenses_pagine():
     rows = a.meta_depenses("2026-08-15", "2026-08-18", fetch=fake_fetch)
     assert [r["ad_id"] for r in rows] == ["1", "2"]
     assert "level" in vus[0] and vus[1] == "https://graph.facebook.com/page2"
+
+
+def test_contacts_nouveaux_curseur():
+    lots = {None: {"items": [{"id": 1, "email": "a@a.fr", "fields": [], "tags": []},
+                             {"id": 2, "email": "b@b.fr", "fields": [], "tags": []}], "hasMore": True},
+            "2":  {"items": [{"id": 3, "email": "c@c.fr", "fields": [], "tags": []}], "hasMore": False}}
+    def fake_sio(path, **p):
+        assert path == "contacts" and p.get("limit") == 100
+        return lots[p.get("startingAfter")]
+    rows, dernier = a.contacts_nouveaux(depuis=None, sio_fn=fake_sio)
+    assert [r["contact_id"] for r in rows] == ["1", "2", "3"]
+    assert dernier == "3"

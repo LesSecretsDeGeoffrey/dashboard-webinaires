@@ -286,3 +286,92 @@ def run_depenses(dry=False, backfill=None):
     print("Meta : %d lignes pub/jour (%s -> %s)" % (len(rows), since, today))
     if rows and not dry:
         sb_upsert("depenses_ads", rows, "date,ad_id")
+
+
+def contacts_nouveaux(depuis, sio_fn=None, plafond=60000):
+    """Passe (a) : tous les contacts APRES le curseur. Rend (lignes, nouveau_curseur)."""
+    sio_fn = sio_fn or sio
+    rows, after = [], depuis
+    while True:
+        p = {"limit": 100}
+        if after:
+            p["startingAfter"] = after
+        d = sio_fn("contacts", **p)
+        items = d.get("items", [])
+        rows += [ligne_contact(c) for c in items]
+        if items:
+            after = str(items[-1]["id"])
+        if not d.get("hasMore") or not items or len(rows) >= plafond:
+            break
+    return rows, after
+
+
+def contacts_du_tag(tag, sio_fn=None):
+    """Passe (b) : contacts d'un tag (base d'inscription reelle d'un live).
+    Meme logique que welya_auto_sync.contacts_du_tag."""
+    sio_fn = sio_fn or sio
+    rows, after = [], None
+    while True:
+        p = {"tags": tag, "limit": 100}
+        if after:
+            p["startingAfter"] = after
+        d = sio_fn("contacts", **p)
+        items = d.get("items", [])
+        rows += [ligne_contact(c) for c in items]
+        if not d.get("hasMore") or not items or len(rows) > 20000:
+            break
+        after = str(items[-1]["id"])
+    return rows
+
+
+def contact_par_email(email, sio_fn=None):
+    """Passe (c) : relecture fraiche du contact d'une vente (les champs utm
+    sont ECRASES par une reinscription, la copie locale peut etre perimee)."""
+    sio_fn = sio_fn or sio
+    d = sio_fn("contacts", email=email, limit=1)
+    items = d.get("items", [])
+    return items[0] if items else None
+
+
+def _sauve_curseur(dernier):
+    sb_upsert("sync_state",
+              [{"key": "contacts_sio_curseur", "value": {"dernier_id": dernier},
+                "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat()}],
+              "key")
+
+
+def run_contacts(dry=False):
+    etat = (sb("GET", "/rest/v1/sync_state?key=eq.contacts_sio_curseur&select=value") or [])
+    depuis = (etat[0]["value"] or {}).get("dernier_id") if etat else None
+    # (a) nouveaux, PAR TRANCHES de 5000 : le curseur et les lignes sont persistes
+    # a chaque tranche, un crash a mi-parcours ne perd pas le travail fait
+    # (premier passage = tout l'historique, potentiellement des centaines de pages)
+    total = 0
+    while True:
+        rows, dernier = contacts_nouveaux(depuis, plafond=5000)
+        total += len(rows)
+        if rows and not dry:
+            sb_upsert("contacts_sio", rows, "contact_id")
+            _sauve_curseur(dernier)
+        if len(rows) < 5000:
+            break
+        depuis = dernier
+    print("SIO nouveaux : %d contacts (curseur -> %s)" % (total, dernier))
+    rows = []
+
+    # (b) re-scan des tags des lives a +/-30 j : champs/tags rafraichis
+    lives = {k: v for k, v in json.loads(LIVES_PATH.read_text(encoding="utf-8")).items()
+             if not k.startswith("_")}
+    today = datetime.date.today()
+    for d_live, cfg in sorted(lives.items()):
+        if abs((datetime.date.fromisoformat(d_live) - today).days) <= 30:
+            retag = contacts_du_tag(cfg["tag"])
+            print("SIO tag %s (%s) : %d contacts rafraichis" % (cfg["tag"], d_live, len(retag)))
+            rows += retag
+
+    if rows and not dry:
+        # dedoublonne par contact_id (un contact peut porter plusieurs tags re-scannes)
+        vus = {}
+        for r in rows:
+            vus[r["contact_id"]] = r
+        sb_upsert("contacts_sio", list(vus.values()), "contact_id")
