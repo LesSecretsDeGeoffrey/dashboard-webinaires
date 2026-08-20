@@ -1,0 +1,21 @@
+# Attribution des ventes (phase 1) : depenses Meta par pub/jour + copie des
+# contacts Systeme.io + attribution de chaque vente a sa pub/son canal.
+# Ne tourne qu'apres le PUSH du depot (committe ne suffit pas).
+name: Attribution ventes
+
+on:
+  schedule:
+    - cron: '30 2,8,14,20 * * *'   # toutes les 6 h (UTC), decale des syncs existants
+  workflow_dispatch: {}
+
+jobs:
+  attribution:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Depenses + contacts + attribution -> Supabase
+        env:
+          SYSTEME_API_KEY: ${{ secrets.SYSTEME_API_KEY }}
+          META_TOKEN: ${{ secrets.META_TOKEN }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python3 auto-sync/attribution_sync.py
