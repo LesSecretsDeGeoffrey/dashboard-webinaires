@@ -18,6 +18,13 @@ def test_canal_de_canaux_nommes():
         assert a.canal_de(c, None) == c
         assert a.canal_de(c.upper(), "lien") == c  # le canal nomme gagne sur medium=lien
 
+def test_canal_de_manychat_dans_le_medium():
+    """Terrain : utm_source=post + utm_medium=manychat-insta (acheteur cdanteny 09/08)."""
+    assert a.canal_de("post", "manychat-insta") == "manychat"
+    assert a.canal_de(None, "manychat") == "manychat"
+    assert a.canal_de("fb", "manychat-insta") == "ads"   # payant gagne toujours
+
+
 def test_canal_de_lien_et_organique():
     assert a.canal_de("autre", "lien") == "lien"
     assert a.canal_de(None, None) == "organique"
@@ -29,7 +36,8 @@ def test_canal_de_parite_sql():
     schema : toute modif se fait aux DEUX endroits (spec §7)."""
     sql = open(a.SCHEMA_PATH, encoding="utf-8").read().lower()
     for mot in ("'fb'", "'ig'", "'facebook'", "'instagram'", "'an'", "'msg'",
-                "'meta'", "'ads'", "'manychat'", "'whatsapp'", "'lien'", "'organique'"):
+                "'meta'", "'ads'", "'manychat'", "'whatsapp'", "'lien'", "'organique'",
+                "'%manychat%'"):
         assert mot in sql, f"{mot} absent du schema SQL"
     assert "manychat" not in str(sorted(a.PAID)), "ManyChat n'est PAS payant ici"
 
@@ -208,3 +216,14 @@ def test_faut_relire_contact():
 def test_iso_fraction_courte():
     d = a._iso("2026-08-09T21:30:00.12345+00:00")
     assert d == datetime.datetime(2026, 8, 9, 21, 30, 0, 123450, tzinfo=datetime.timezone.utc)
+
+
+def test_contact_par_email_limit_api():
+    """L'API SIO exige 10 <= limit <= 100 : limit=1 repond 422 (vu au dry-run du 20/08)."""
+    vus = {}
+    def fake_sio(path, **p):
+        vus.update(p)
+        assert 10 <= p["limit"] <= 100
+        return {"items": [{"id": 7, "email": "x@y.fr"}]}
+    c = a.contact_par_email("x@y.fr", sio_fn=fake_sio)
+    assert c["id"] == 7 and vus["email"] == "x@y.fr"

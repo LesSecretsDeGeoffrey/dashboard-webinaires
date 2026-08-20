@@ -79,6 +79,10 @@ def canal_de(src, med):
         return "ads"
     if s in CANAUX:
         return s
+    if "manychat" in m:
+        # donnees reelles : ManyChat vit dans le MEDIUM (utm_medium=manychat-insta,
+        # utm_source=post) — vu sur les acheteurs du 09/08 au controle de reference
+        return "manychat"
     if m == "lien":
         return "lien"
     return "organique"
@@ -337,7 +341,7 @@ def contact_par_email(email, sio_fn=None):
     """Passe (c) : relecture fraiche du contact d'une vente (les champs utm
     sont ECRASES par une reinscription, la copie locale peut etre perimee)."""
     sio_fn = sio_fn or sio
-    d = sio_fn("contacts", email=email, limit=1)
+    d = sio_fn("contacts", email=email, limit=10)  # l'API SIO refuse limit < 10 (422)
     items = d.get("items", [])
     return items[0] if items else None
 
