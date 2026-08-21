@@ -101,7 +101,7 @@ td.tronque { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 <div id="ecran-parcours" class="ecran"><div class="wrap">
   <h2>Parcours d'une personne</h2>
   <div class="lform">
-    <input type="email" id="pEmail" placeholder="email de l'inscrit / acheteur" style="min-width:260px">
+    <input type="email" id="pEmail" placeholder="email de l'inscrit / acheteur" aria-label="Email de l'inscrit ou de l'acheteur" style="min-width:260px">
     <button class="fbtn" id="pGo">Voir</button>
   </div>
   <p class="note" id="pMsg"></p>
@@ -119,11 +119,11 @@ td.tronque { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 <div id="ecran-liens" class="ecran"><div class="wrap">
   <h2>Créer un lien court</h2>
   <div class="lform">
-    <input id="lSlug" placeholder="slug (a-z, 0-9, tirets)">
-    <input id="lDest" placeholder="https://destination…" style="min-width:280px">
-    <select id="lCanal"><option>manychat</option><option>email</option><option>story</option>
+    <input id="lSlug" placeholder="slug (a-z, 0-9, tirets)" aria-label="Slug du lien court">
+    <input id="lDest" placeholder="https://destination…" aria-label="URL de destination" style="min-width:280px">
+    <select id="lCanal" aria-label="Canal du lien"><option>manychat</option><option>email</option><option>story</option>
       <option>bio</option><option>whatsapp</option><option>ads</option><option>autre</option></select>
-    <input id="lLib" placeholder="libellé (optionnel)">
+    <input id="lLib" placeholder="libellé (optionnel)" aria-label="Libellé du lien (optionnel)">
     <button class="fbtn" id="lGo">Créer</button>
   </div>
   <p class="note" id="lMsg">La destination doit être dans la liste blanche du collecteur
@@ -161,7 +161,7 @@ async function q(path) {
   for (let from = 0; ; from += 1000) {
     const r = await fetch(SB.url + '/rest/v1/' + path, {
       headers: { ...H, 'Range': from + '-' + (from + 999) } });
-    if (!r.ok) break;
+    if (!r.ok) { console.warn('supabase', r.status, path.split('?')[0]); break; }
     const lot = await r.json();
     out.push(...lot);
     if (lot.length < 1000) break;
@@ -210,6 +210,8 @@ function bornes() {
 function iso(d) { return d.toLocaleDateString('sv-SE', { timeZone: 'Europe/Paris' }); }
 function addJ(s, n) { const d = new Date(s + 'T12:00:00Z'); d.setUTCDate(d.getUTCDate() + n); return iso(d); }
 const fmt = (n, d = 0) => (Number(n) || 0).toFixed(d).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const cle = (slug, adset) => (((slug || '').trim() || '?')) + '|' + (((adset || '').trim() || '?'));
 
 function render() {
@@ -280,7 +282,7 @@ function render() {
   clicsL.filter(dedans).forEach(r => { cl[r.canal] = (cl[r.canal] || 0) + +r.clics; });
   const cs = [...new Set([...Object.keys(cv), ...Object.keys(ci), ...Object.keys(cl)])].sort();
   const c = ['<tr><th>Canal</th><th>Clics liens</th><th>Inscrits</th><th>Ventes</th><th>CA</th></tr>'];
-  cs.forEach(k => c.push('<tr><td>' + k + '</td><td>' + fmt(cl[k] || 0) + '</td><td>' + fmt(ci[k] || 0) +
+  cs.forEach(k => c.push('<tr><td>' + esc(k) + '</td><td>' + fmt(cl[k] || 0) + '</td><td>' + fmt(ci[k] || 0) +
     '</td><td>' + fmt((cv[k] || {}).v || 0) + '</td><td>' + fmt((cv[k] || {}).ca || 0) + ' €</td></tr>'));
   document.getElementById('tblCanaux').innerHTML = c.join('');
 
@@ -296,7 +298,7 @@ function ligne(a1, a2, p, cls) {
   const cpv = p.ventes && p.spend ? fmt(p.spend / p.ventes) + ' €' : '—';
   const roas = p.spend ? (p.ca / p.spend).toFixed(2) : '—';
   const cpi = p.inscrits && p.spend ? fmt(p.spend / p.inscrits, 2) + ' €' : '—';
-  return '<tr class="' + (cls || '') + '"><td>' + a1 + '</td><td>' + (a2 || '') + '</td><td>' +
+  return '<tr class="' + (cls || '') + '"><td>' + esc(a1) + '</td><td>' + esc(a2 || '') + '</td><td>' +
     fmt(p.spend) + ' €</td><td>' + fmt(p.inscrits) + '</td><td>' + cpi + '</td><td>' +
     fmt(p.ventes) + '</td><td>' + fmt(p.ca) + ' €</td><td>' + cpv + '</td><td>' + roas + '</td></tr>';
 }
@@ -335,9 +337,8 @@ document.querySelectorAll('#onglets .fbtn').forEach(b => b.onclick = () => {
   b.classList.add('on');
   document.querySelectorAll('.ecran').forEach(s => s.classList.remove('on'));
   document.getElementById('ecran-' + b.dataset.ecran).classList.add('on');
-  // gardes typeof : Parcours/Tunnels n'arrivent qu'aux Tasks 9-10
   if (b.dataset.ecran === 'liens') chargerLiens();      // toujours frais
-  if (b.dataset.ecran === 'tunnels' && typeof chargerTunnels === 'function') chargerTunnels();
+  if (b.dataset.ecran === 'tunnels') chargerTunnels();
 });
 
 // --- ecran Liens ---
@@ -345,28 +346,39 @@ const GO = 'https://go.lessecretsdegeoffrey.fr/';
 async function chargerLiens() {
   const liens = await q('liens?select=*&order=created_at.desc');
   const t = ['<tr><th>Lien</th><th>Canal</th><th>Libellé</th><th>Destination</th><th>Clics</th><th></th></tr>'];
-  liens.forEach(l => t.push('<tr><td><a href="' + GO + l.slug + '" target="_blank" rel="noopener">go…/' +
-    l.slug + '</a></td><td>' + l.canal + '</td><td>' + (l.libelle || '') +
-    '</td><td class="tronque">' + l.destination + '</td><td>' + fmt(l.clics) +
-    '</td><td><button class="fbtn" data-copie="' + GO + l.slug + '">Copier</button></td></tr>'));
+  liens.forEach(l => t.push('<tr><td><a href="' + GO + esc(l.slug) + '" target="_blank" rel="noopener">go…/' +
+    esc(l.slug) + '</a></td><td>' + esc(l.canal) + '</td><td>' + esc(l.libelle || '') +
+    '</td><td class="tronque">' + esc(l.destination) + '</td><td>' + fmt(l.clics) +
+    '</td><td><button class="fbtn" data-copie="' + GO + esc(l.slug) + '">Copier</button></td></tr>'));
   document.getElementById('tblLiens').innerHTML = t.join('');
   document.querySelectorAll('[data-copie]').forEach(b => b.onclick = () =>
     navigator.clipboard.writeText(b.dataset.copie).then(() => { b.textContent = 'Copié ✓'; }));
 }
-document.getElementById('lGo').onclick = async () => {
+async function creerLien() {
   const slug = document.getElementById('lSlug').value.trim().toLowerCase();
   const destination = document.getElementById('lDest').value.trim();
-  const msg = document.getElementById('lMsg');
+  const msg = document.getElementById('lMsg'), btn = document.getElementById('lGo');
   if (!/^[a-z0-9-]{1,50}$/.test(slug)) { msg.textContent = 'Slug invalide : a-z, 0-9 et tirets uniquement'; return; }
   if (!/^https:\/\/.+/.test(destination)) { msg.textContent = 'Destination en https:// obligatoire'; return; }
-  const r = await fetch(SB.url + '/rest/v1/liens', { method: 'POST',
-    headers: { ...H, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
-    body: JSON.stringify({ slug, destination, canal: document.getElementById('lCanal').value,
-                           libelle: document.getElementById('lLib').value.trim() || null }) });
-  msg.textContent = r.ok ? 'Créé : ' + GO + slug
-    : (r.status === 409 ? 'Ce slug existe déjà' : 'Erreur ' + r.status);
-  if (r.ok) { document.getElementById('lSlug').value = ''; chargerLiens(); }
-};
+  btn.disabled = true;
+  try {
+    const r = await fetch(SB.url + '/rest/v1/liens', { method: 'POST',
+      headers: { ...H, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+      body: JSON.stringify({ slug, destination, canal: document.getElementById('lCanal').value,
+                             libelle: document.getElementById('lLib').value.trim() || null }) });
+    msg.textContent = r.ok ? 'Créé : ' + GO + slug
+      : ((r.status === 401 || r.status === 403) ? 'Écriture refusée : rejouer attribution-schema.sql (policies liens)'
+        : (r.status === 409 ? 'Ce slug existe déjà' : 'Erreur ' + r.status));
+    if (r.ok) { document.getElementById('lSlug').value = ''; chargerLiens(); }
+  } catch (e) {
+    msg.textContent = 'Réseau KO, réessaie';
+  } finally {
+    btn.disabled = false;
+  }
+}
+document.getElementById('lGo').onclick = creerLien;
+document.getElementById('lSlug').addEventListener('keydown', e => { if (e.key === 'Enter') creerLien(); });
+document.getElementById('lDest').addEventListener('keydown', e => { if (e.key === 'Enter') creerLien(); });
 
 // --- ecran Parcours ---
 document.getElementById('pGo').onclick = parcours;
@@ -395,7 +407,7 @@ async function parcours() {
       : (t.type === 'identite' ? (t.contexte || '') + ' ' + (t.email || '')
                                : (t.path || t.url || ''));
     return '<div class="ptouche t-' + t.type + '"><b>' + quand + '</b> · ' + t.type + ' · ' +
-      detail + (source ? ' <span class="note">(' + source + ')</span>' : '') + '</div>';
+      esc(detail) + (source ? ' <span class="note">(' + esc(source) + ')</span>' : '') + '</div>';
   }).join('') || '<p class="note">Aucune touche pour cet email — acheteur d\'avant le snippet ' +
     '(son attribution vit quand même dans Pubs, modèle sio_contact)</p>';
 }
@@ -407,11 +419,11 @@ async function chargerTunnels() {
   rows.forEach(r => (par[r.tunnel] = par[r.tunnel] || []).push(r));
   document.getElementById('tunnelsZone').innerHTML = Object.keys(par).sort().map(tu => {
     const l = par[tu];
-    let html = '<h2>' + tu + '</h2><div class="scroll"><table><tr><th>Étape (path)</th>' +
+    let html = '<h2>' + esc(tu) + '</h2><div class="scroll"><table><tr><th>Étape (path)</th>' +
                '<th>Personnes</th><th>Vues</th><th>Taux vs étape préc.</th></tr>';
     l.forEach((r, i) => {
       const taux = i ? Math.round(100 * r.personnes / l[i - 1].personnes) + ' %' : '—';
-      html += '<tr><td>' + r.path + '</td><td>' + fmt(r.personnes) + '</td><td>' +
+      html += '<tr><td>' + esc(r.path) + '</td><td>' + fmt(r.personnes) + '</td><td>' +
               fmt(r.vues) + '</td><td>' + taux + '</td></tr>';
     });
     return html + '</table></div>';
