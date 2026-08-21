@@ -98,3 +98,34 @@ pas en service, les écrans restent vides sans casser la page (`q()` rend `[]` s
 `clic_lien`, `tunnel_de_path`) vivent dans le même `attribution-schema.sql` que la phase 1 —
 **rejouer le fichier EN ENTIER dans Supabase > SQL Editor** après toute modification, comme
 en phase 1 (schéma idempotent, pas de migration séparée).
+
+## Attribution (phase 3) — Purchase CAPI
+
+Le robot `auto-sync/attribution_sync.py` envoie chaque vente **attribuée** à Meta par l'API
+Conversions (`Purchase`, pixel `2085581652276222`), **une requête par vente**, journal dans
+`capi_envois` (`statut` ok · erreur · doublon, `reponse` brute de Meta, `test`).
+
+Règles : `purchased_at` ≤ 7 j (Meta refuse au-delà → la première activation n'envoie pas
+l'historique) · un `event_id` (`purchase-` + empreinte(email|vente_id), `auto-sync/empreinte.py`
+= copie de `ads-atelier-macarons-2aout/empreinte.py`, parité testée) n'est envoyé qu'une fois pour
+de vrai · même email + même produit déjà envoyé = `doublon` (échéance d'un Nx rejouée par le
+webhook), pas renvoyé · `user_data` = em/fn hachés, `external_id` = sha(email) + vid,
+`fbc`/`fbp`/IP/UA de la dernière touche du parcours antérieure à l'achat (mode `sio_contact` :
+fbc du contact, sans IP/UA, Meta avertit sur la qualité, c'est attendu).
+
+**Seul le serveur envoie Purchase** : avant d'activer le cron, on coupe les deux autres sources
+relevées le 21/08 (la CAPI native de Systeme.io réglée sur le domaine, et le bloc navigateur v2 de
+`/confirmation-paiement-mfp`), procédure dans `../tracking-attribution/README.md`. Le Lead n'est
+pas touché.
+
+Options : `--capi` (réel, sur le cron à partir de la Task 8) · `--capi-test TESTxxxxx` (outil
+Évènements de test, `test=true`, + `--capi-forcer` = rejoue la dernière vente jamais envoyée pour
+de vrai, datée de maintenant, s'il n'y en a aucune sur 7 j) · `--capi-retry` (rejoue les erreurs
+réelles) · `--seulement-capi` (saute dépenses/contacts/attribution). Depuis GitHub → Actions →
+« Attribution ventes » → Run workflow : champs `capi_test_code`, `capi_go`, `capi_retry`. Le
+workflow a un groupe `concurrency` : un run manuel qui chevauche le cron attend son tour.
+
+Tout refus de Meta (test OU réel) met le job en ROUGE (mail d'échec) : lire `capi_envois.reponse`
+ou la ligne `ERREUR :` du log. Une ligne `JOURNAL KO apres envoi` = la vente est partie chez Meta
+mais pas journalisée (Supabase KO) : le run suivant la renverra avec le même `event_id`, que Meta
+dédoublonne pendant 48 h.
