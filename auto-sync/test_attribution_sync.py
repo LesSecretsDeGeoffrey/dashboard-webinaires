@@ -327,3 +327,66 @@ def test_eid_purchase_deterministe_et_normalise():
     assert e1.startswith("purchase-") and len(e1) == len("purchase-") + 16
     # une autre vente du meme email = un autre identifiant (pas de fusion cote Meta)
     assert a.eid_purchase("jean.dupont@gmail.com", "autre-id") != e1
+
+
+# VENTE_P3, pas VENTE : un fixture VENTE existe deja (phase 1, ligne ~108) et deux tests
+# d'attribution le lisent a l'appel -> le redefinir ici les casserait.
+VENTE_P3 = {"id": "dec25bf4-0090-4bda-bb97-1c5d7e58663d", "email": "Jean@Gmail.com",
+         "montant": 498, "produit": "MFP 3x166€", "purchased_at": "2026-08-20T18:30:00+00:00",
+         "raw": {"first_name": "Jean", "page": "https://www.lessecretsdegeoffrey.fr/paiementfondationspro"}}
+T0 = datetime.datetime(2026, 8, 21, 12, 0, tzinfo=datetime.timezone.utc).timestamp()
+
+def _t(ts, **k):
+    d = {"id": str(uuid.uuid4()), "vid": "v1", "ts": ts, "type": "pageview"}
+    d.update(k)
+    return d
+
+def test_evenement_purchase_complet():
+    touches = [
+        _t("2026-08-18T10:00:00+00:00", fbc="fb.1.100.OLD", fbp="fb.1.1.111", ip="1.1.1.1", ua="UA-old"),
+        _t("2026-08-20T18:25:00+00:00", type="identite", contexte="checkout",
+           fbc="fb.1.200.NEW", fbp="fb.1.1.222", ip="2.2.2.2", ua="UA-new"),
+        _t("2026-08-20T18:30:00+00:00", type="achat", vid="v1"),   # fabriquee par le robot : ignoree
+    ]
+    attr = {"vid": "v1", "modele": "last_paid", "tunnel": "live", "premier_contact": {}}
+    e = a.evenement_purchase(VENTE_P3, attr, touches, T0)
+    assert e["event_name"] == "Purchase" and e["action_source"] == "website"
+    assert e["event_time"] == int(a._iso(VENTE_P3["purchased_at"]).timestamp())
+    assert e["event_id"] == a.eid_purchase("jean@gmail.com", VENTE_P3["id"])
+    assert e["event_source_url"] == "https://www.lessecretsdegeoffrey.fr/paiementfondationspro"
+    u = e["user_data"]
+    assert u["em"] == [a.sha("jean@gmail.com")] and u["fn"] == [a.sha("Jean")]
+    assert u["external_id"] == [a.sha("jean@gmail.com"), "v1"]
+    assert u["fbc"] == "fb.1.200.NEW" and u["fbp"] == "fb.1.1.222"
+    assert u["client_ip_address"] == "2.2.2.2" and u["client_user_agent"] == "UA-new"
+    assert e["custom_data"] == {"value": 498.0, "currency": "EUR", "content_name": "MFP 3x166€"}
+
+def test_evenement_purchase_sio_contact_sans_touches():
+    """Acheteur d'avant le snippet : pas d'IP/UA, fbc reconstruit depuis le fbclid du contact."""
+    attr = {"vid": None, "modele": "sio_contact", "tunnel": "live",
+            "premier_contact": {"utm_source": "fb", "fbclid": "ABC"}}
+    v = dict(VENTE_P3, raw={"source": "saisie manuelle"})
+    e = a.evenement_purchase(v, attr, [], T0)
+    u = e["user_data"]
+    assert u["external_id"] == [a.sha("jean@gmail.com")]
+    assert "fn" not in u and "client_ip_address" not in u and "client_user_agent" not in u
+    assert u["fbc"] == "fb.1.%d.ABC" % (e["event_time"] * 1000)
+    assert e["event_source_url"] == a.TUNNELS_URL["live"]
+
+def test_evenement_purchase_fbc_reconstruit_depuis_touche_fbclid():
+    touches = [_t("2026-08-19T10:00:00+00:00", fbclid="XYZ")]
+    e = a.evenement_purchase(VENTE_P3, {"vid": "v1", "tunnel": "ebook", "premier_contact": {}}, touches, T0)
+    assert e["user_data"]["fbc"] == "fb.1.%d.XYZ" % int(a._iso("2026-08-19T10:00:00+00:00").timestamp() * 1000)
+
+def test_evenement_purchase_url_par_tunnel_si_raw_page_pas_une_url():
+    v = dict(VENTE_P3, raw={"page": "Page de confirmation"})
+    assert a.evenement_purchase(v, {"tunnel": "call", "premier_contact": {}}, [], T0)["event_source_url"] == a.TUNNELS_URL["call"]
+    assert a.evenement_purchase(v, {"tunnel": "autre", "premier_contact": {}}, [], T0)["event_source_url"] == a.URL_DEFAUT
+    assert a.evenement_purchase(dict(VENTE_P3, raw=None), {"tunnel": None, "premier_contact": None}, [], T0)["event_source_url"] == a.URL_DEFAUT
+
+def test_evenement_purchase_event_time_jamais_futur():
+    v = dict(VENTE_P3, purchased_at="2026-08-21T12:00:05+00:00")   # 5 s dans le futur (horloge Make)
+    assert a.evenement_purchase(v, {"premier_contact": {}}, [], T0)["event_time"] == int(T0)
+
+def test_evenement_purchase_sans_email():
+    assert a.evenement_purchase(dict(VENTE_P3, email="  "), {"premier_contact": {}}, [], T0) is None

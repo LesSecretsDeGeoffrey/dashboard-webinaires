@@ -271,6 +271,62 @@ def eid_purchase(email, vente_id):
     return "purchase-" + empreinte(email.strip().lower() + "|" + str(vente_id))
 
 
+def _derniere_touche_avec(touches, cle):
+    """Derniere touche (hors 'achat', fabriquee par le robot sans IP) portant la cle."""
+    cand = [t for t in touches if t.get("type") != "achat" and t.get(cle)]
+    return max(cand, key=lambda t: _iso(t["ts"])) if cand else None
+
+
+def _fbc_de(touches, premier_contact, ts):
+    t = _derniere_touche_avec(touches, "fbc")
+    if t:
+        return t["fbc"]
+    t = _derniere_touche_avec(touches, "fbclid")
+    if t:
+        return "fb.1.%d.%s" % (int(_iso(t["ts"]).timestamp() * 1000), t["fbclid"])
+    pc = premier_contact or {}
+    if pc.get("fbc"):
+        return pc["fbc"]
+    if pc.get("fbclid"):   # format attendu par Meta : fb.1.<horodatage ms>.<fbclid>
+        return "fb.1.%d.%s" % (ts * 1000, pc["fbclid"])
+    return None
+
+
+def evenement_purchase(vente, attr, touches, maintenant):
+    """vente + sa ligne attribution + touches de la personne -> evenement Purchase
+    pour /events. PURE. None si la vente n'a pas d'email (rien a apparier)."""
+    email = (vente.get("email") or "").strip().lower()
+    if not email:
+        return None
+    ts = min(int(_iso(vente["purchased_at"]).timestamp()), int(maintenant))
+    raw = vente.get("raw") or {}
+    attr = attr or {}
+    user = {"em": [sha(email)], "external_id": [sha(email)]}
+    if attr.get("vid"):
+        user["external_id"].append(attr["vid"])
+    if raw.get("first_name"):
+        user["fn"] = [sha(raw["first_name"])]
+    fbc = _fbc_de(touches, attr.get("premier_contact"), ts)
+    if fbc:
+        user["fbc"] = fbc
+    for cle, champ in (("fbp", "fbp"), ("ip", "client_ip_address"), ("ua", "client_user_agent")):
+        t = _derniere_touche_avec(touches, cle)
+        if t:
+            user[champ] = t[cle]
+    page = raw.get("page") or ""
+    url = page if page.startswith("http") else TUNNELS_URL.get(attr.get("tunnel") or "", URL_DEFAUT)
+    return {
+        "event_name": "Purchase",
+        "event_time": ts,
+        "event_id": eid_purchase(email, vente["id"]),
+        "action_source": "website",
+        "event_source_url": url,
+        "user_data": user,
+        "custom_data": {"value": float(vente.get("montant") or 0), "currency": "EUR",
+                        "content_name": vente.get("produit") or ""},
+    }
+
+
 # ---------------------------------------------------------------- I/O
 
 def _http_json(url, data=None, headers=None, method=None):
