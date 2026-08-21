@@ -410,3 +410,38 @@ def test_evenement_purchase_raw_page_et_prenom_nettoyes():
     assert e["event_source_url"] == "https://www.lessecretsdegeoffrey.fr/paiementbook"
     # raw.page qui n'est pas une chaine : pas de plantage, repli sur le tunnel
     assert a.evenement_purchase(dict(VENTE_P3, raw={"page": {"u": 1}}), {"tunnel": "live", "premier_contact": {}}, [], T0)["event_source_url"] == a.TUNNELS_URL["live"]
+
+
+def _v(i, email="a@b.fr", produit="MFP 497€", jours=1):
+    ts = datetime.datetime.fromtimestamp(T0, datetime.timezone.utc) - datetime.timedelta(days=jours)
+    return {"id": "v%d" % i, "email": email, "produit": produit, "montant": 497,
+            "purchased_at": ts.isoformat()}
+
+def test_ventes_a_envoyer_fenetre_7j():
+    ventes = [_v(1, jours=8), _v(2, email="b@b.fr", jours=6.9), _v(3, email="c@b.fr", jours=0)]
+    env, dbl = a.ventes_a_envoyer(ventes, [], T0)
+    assert [v["id"] for v in env] == ["v2", "v3"] and dbl == []
+
+def test_ventes_a_envoyer_ignore_deja_envoyees_mais_pas_les_tests():
+    ventes = [_v(1), _v(2, email="b@b.fr"), _v(3, email="c@b.fr")]
+    envois = [{"vente_id": "v1", "statut": "ok", "test": False},
+              {"vente_id": "v2", "statut": "ok", "test": True},      # envoi test : ne compte pas
+              {"vente_id": "v3", "statut": "erreur", "test": False}]  # erreur reelle : pas rejouee sans retry
+    env, _ = a.ventes_a_envoyer(ventes, envois, T0)
+    assert [v["id"] for v in env] == ["v2"]
+    env, _ = a.ventes_a_envoyer(ventes, envois, T0, retry=True)
+    assert [v["id"] for v in env] == ["v2", "v3"]
+
+def test_ventes_a_envoyer_doublon_meme_email_meme_produit():
+    # v1 envoyee ok il y a 30 j ; v2 = echeance rejouee par le webhook (meme email, meme plan)
+    # v3 = meme email, AUTRE produit : legitime ; v4/v5 = deux lignes du meme lot
+    ventes = [_v(1, jours=30), _v(2, jours=1), _v(3, produit="Ebook 90 jours", jours=1),
+              _v(4, email="d@b.fr", jours=2), _v(5, email="d@b.fr", jours=1)]
+    envois = [{"vente_id": "v1", "statut": "ok", "test": False}]
+    env, dbl = a.ventes_a_envoyer(ventes, envois, T0)
+    assert [v["id"] for v in env] == ["v4", "v3"] or [v["id"] for v in env] == ["v3", "v4"]
+    assert sorted(v["id"] for v in dbl) == ["v2", "v5"]
+
+def test_ventes_a_envoyer_sans_email_ecartee():
+    env, dbl = a.ventes_a_envoyer([_v(1, email="")], [], T0)
+    assert env == [] and dbl == []

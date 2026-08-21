@@ -334,6 +334,40 @@ def evenement_purchase(vente, attr, touches, maintenant):
     }
 
 
+def _cle_personne(v):
+    return ((v.get("email") or "").strip().lower(), (v.get("produit") or "").strip().lower())
+
+
+def ventes_a_envoyer(ventes, envois, maintenant, retry=False):
+    """ventes (toutes avec attribution, ~120 j) + journal capi_envois -> (a_envoyer, doublons).
+    PURE. Regles : fenetre 7 j ; jamais deja envoyee POUR DE VRAI (test=false) sauf
+    retry sur statut='erreur' ; doublon = meme (email, produit) qu'une vente deja
+    envoyee ok ou qu'une vente plus ancienne du meme lot (echeance Nx rejouee par
+    le webhook -> nouvelle ligne ventes). Les doublons sont rendus pour etre
+    journalises (statut='doublon'), jamais envoyes."""
+    seuil = maintenant - CAPI_FENETRE_J * 86400
+    reel = {e["vente_id"]: e for e in envois if not e.get("test")}
+    par_id = {v["id"]: v for v in ventes}
+    deja = {_cle_personne(par_id[i]) for i, e in reel.items()
+            if e.get("statut") == "ok" and i in par_id}
+    a_envoyer, doublons = [], []
+    for v in sorted(ventes, key=lambda v: _iso(v["purchased_at"])):
+        if not (v.get("email") or "").strip():
+            continue
+        if _iso(v["purchased_at"]).timestamp() < seuil:
+            continue
+        e = reel.get(v["id"])
+        if e and not (retry and e.get("statut") == "erreur"):
+            continue
+        cle = _cle_personne(v)
+        if cle in deja:
+            doublons.append(v)
+            continue
+        deja.add(cle)
+        a_envoyer.append(v)
+    return a_envoyer, doublons
+
+
 # ---------------------------------------------------------------- I/O
 
 def _http_json(url, data=None, headers=None, method=None):
