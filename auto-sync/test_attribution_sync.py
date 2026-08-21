@@ -599,3 +599,10 @@ def test_run_capi_journal_ko_apres_envoi_trace_et_releve(monkeypatch, capsys):
         a.run_capi(dict(GO))
     out = capsys.readouterr().out
     assert "JOURNAL KO apres envoi ok : vente v1 event_id " + a.eid_purchase("a@b.fr", "v1") in out
+
+def test_workflow_attribution_porte_les_options_capi():
+    yml = (Path(a.HERE).parent / ".github" / "workflows" / "attribution.yml").read_text(encoding="utf-8")
+    for mot in ("capi_test_code", "capi_go", "capi_retry", "--capi-test", "--capi-forcer",
+                "--seulement-capi", "--capi-retry", "CAPI_TEST_CODE"):
+        assert mot in yml, mot
+    assert "concurrency" in yml and "cancel-in-progress: false" in yml
