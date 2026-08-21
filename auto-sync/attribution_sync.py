@@ -271,17 +271,22 @@ def eid_purchase(email, vente_id):
     return "purchase-" + empreinte(email.strip().lower() + "|" + str(vente_id))
 
 
-def _derniere_touche_avec(touches, cle):
-    """Derniere touche (hors 'achat', fabriquee par le robot sans IP) portant la cle."""
-    cand = [t for t in touches if t.get("type") != "achat" and t.get(cle)]
-    return max(cand, key=lambda t: _iso(t["ts"])) if cand else None
+def _derniere_touche_avec(touches, cle, jusqua):
+    """Derniere touche (hors 'achat', fabriquee par le robot sans IP) portant la cle,
+    parmi celles datees au plus tard a l'achat (jusqua) : une touche posterieure
+    a l'achat n'est pas une cause de l'achat (pageview du lendemain avant le
+    passage du cron). Departage a egalite de ts comme attribuer() : la DERNIERE
+    de la liste gagne (touches_de trie deja par ts,id)."""
+    cand = [t for t in touches
+            if t.get("type") != "achat" and t.get(cle) and _iso(t["ts"]) <= jusqua]
+    return sorted(cand, key=lambda t: _iso(t["ts"]))[-1] if cand else None
 
 
-def _fbc_de(touches, premier_contact, ts):
-    t = _derniere_touche_avec(touches, "fbc")
+def _fbc_de(touches, premier_contact, ts, jusqua):
+    t = _derniere_touche_avec(touches, "fbc", jusqua)
     if t:
         return t["fbc"]
-    t = _derniere_touche_avec(touches, "fbclid")
+    t = _derniere_touche_avec(touches, "fbclid", jusqua)
     if t:
         return "fb.1.%d.%s" % (int(_iso(t["ts"]).timestamp() * 1000), t["fbclid"])
     pc = premier_contact or {}
@@ -298,22 +303,24 @@ def evenement_purchase(vente, attr, touches, maintenant):
     email = (vente.get("email") or "").strip().lower()
     if not email:
         return None
-    ts = min(int(_iso(vente["purchased_at"]).timestamp()), int(maintenant))
+    jusqua = _iso(vente["purchased_at"])
+    ts = min(int(jusqua.timestamp()), int(maintenant))
     raw = vente.get("raw") or {}
     attr = attr or {}
     user = {"em": [sha(email)], "external_id": [sha(email)]}
     if attr.get("vid"):
         user["external_id"].append(attr["vid"])
-    if raw.get("first_name"):
-        user["fn"] = [sha(raw["first_name"])]
-    fbc = _fbc_de(touches, attr.get("premier_contact"), ts)
+    prenom = str(raw.get("first_name") or "").strip()
+    if prenom:
+        user["fn"] = [sha(prenom)]
+    fbc = _fbc_de(touches, attr.get("premier_contact"), ts, jusqua)
     if fbc:
         user["fbc"] = fbc
     for cle, champ in (("fbp", "fbp"), ("ip", "client_ip_address"), ("ua", "client_user_agent")):
-        t = _derniere_touche_avec(touches, cle)
+        t = _derniere_touche_avec(touches, cle, jusqua)
         if t:
             user[champ] = t[cle]
-    page = raw.get("page") or ""
+    page = str(raw.get("page") or "").strip()
     url = page if page.startswith("http") else TUNNELS_URL.get(attr.get("tunnel") or "", URL_DEFAUT)
     return {
         "event_name": "Purchase",

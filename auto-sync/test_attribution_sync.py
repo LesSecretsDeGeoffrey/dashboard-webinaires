@@ -343,9 +343,9 @@ def _t(ts, **k):
 
 def test_evenement_purchase_complet():
     touches = [
-        _t("2026-08-18T10:00:00+00:00", fbc="fb.1.100.OLD", fbp="fb.1.1.111", ip="1.1.1.1", ua="UA-old"),
         _t("2026-08-20T18:25:00+00:00", type="identite", contexte="checkout",
            fbc="fb.1.200.NEW", fbp="fb.1.1.222", ip="2.2.2.2", ua="UA-new"),
+        _t("2026-08-18T10:00:00+00:00", fbc="fb.1.100.OLD", fbp="fb.1.1.111", ip="1.1.1.1", ua="UA-old"),
         _t("2026-08-20T18:30:00+00:00", type="achat", vid="v1"),   # fabriquee par le robot : ignoree
     ]
     attr = {"vid": "v1", "modele": "last_paid", "tunnel": "live", "premier_contact": {}}
@@ -390,3 +390,23 @@ def test_evenement_purchase_event_time_jamais_futur():
 
 def test_evenement_purchase_sans_email():
     assert a.evenement_purchase(dict(VENTE_P3, email="  "), {"premier_contact": {}}, [], T0) is None
+
+def test_evenement_purchase_ignore_les_touches_posterieures_a_l_achat():
+    """Une pageview du lendemain (avant le passage du cron) n'est pas une cause de l'achat."""
+    touches = [_t("2026-08-20T18:00:00+00:00", fbc="fb.1.100.AVANT", ip="1.1.1.1", ua="UA-avant"),
+               _t("2026-08-21T09:00:00+00:00", fbc="fb.1.200.APRES", ip="9.9.9.9", ua="UA-apres")]
+    u = a.evenement_purchase(VENTE_P3, {"vid": "v1", "premier_contact": {}}, touches, T0)["user_data"]
+    assert u["fbc"] == "fb.1.100.AVANT" and u["client_ip_address"] == "1.1.1.1" and u["client_user_agent"] == "UA-avant"
+
+def test_evenement_purchase_egalite_de_ts_prend_la_derniere_de_la_liste():
+    """Meme seconde (identite checkout + pageview) : la DERNIERE de la liste gagne, comme attribuer()."""
+    touches = [_t("2026-08-20T18:25:00+00:00", ip="1.1.1.1"), _t("2026-08-20T18:25:00+00:00", ip="2.2.2.2")]
+    assert a.evenement_purchase(VENTE_P3, {"premier_contact": {}}, touches, T0)["user_data"]["client_ip_address"] == "2.2.2.2"
+
+def test_evenement_purchase_raw_page_et_prenom_nettoyes():
+    v = dict(VENTE_P3, raw={"first_name": "   ", "page": " https://www.lessecretsdegeoffrey.fr/paiementbook "})
+    e = a.evenement_purchase(v, {"tunnel": "live", "premier_contact": {}}, [], T0)
+    assert "fn" not in e["user_data"]
+    assert e["event_source_url"] == "https://www.lessecretsdegeoffrey.fr/paiementbook"
+    # raw.page qui n'est pas une chaine : pas de plantage, repli sur le tunnel
+    assert a.evenement_purchase(dict(VENTE_P3, raw={"page": {"u": 1}}), {"tunnel": "live", "premier_contact": {}}, [], T0)["event_source_url"] == a.TUNNELS_URL["live"]
