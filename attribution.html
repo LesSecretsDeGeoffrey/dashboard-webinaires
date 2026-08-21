@@ -42,6 +42,13 @@ tr.total td { border-top: 2px solid var(--or-trans); font-weight: 700; color: va
 #auth input { width: 100%; margin: 14px 0 10px; text-align: center; font-size: 18px; }
 #auth button { width: 100%; background: var(--or); border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+.ecran { display: none; } .ecran.on { display: block; }
+.lform { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0; }
+.lform input { background: var(--sombre-2); color: var(--creme); border: 1px solid var(--or-trans); border-radius: 8px; padding: 7px 10px; }
+.ptouche { padding: 8px 10px; border-left: 2px solid var(--or-trans); margin: 0 0 4px; }
+.t-achat { border-color: var(--or); color: var(--or-clair); }
+.t-identite { border-color: var(--vert); }
+td.tronque { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
 <body>
@@ -56,6 +63,14 @@ tr.total td { border-top: 2px solid var(--or-trans); font-weight: 700; color: va
   <h1>Attribution</h1>
   <a href="index.html">← Dashboard</a>
 </div>
+
+<div class="filtres" id="onglets">
+  <button class="fbtn on" data-ecran="perf">Pubs · Canaux</button>
+  <button class="fbtn" data-ecran="parcours">Parcours</button>
+  <button class="fbtn" data-ecran="tunnels">Tunnels</button>
+  <button class="fbtn" data-ecran="liens">Liens</button>
+</div>
+<div id="ecran-perf" class="ecran on">
 
 <div class="filtres">
   <button class="fbtn on" data-j="7">7 j</button>
@@ -81,6 +96,42 @@ tr.total td { border-top: 2px solid var(--or-trans); font-weight: 700; color: va
   venu d'une pub puis converti par un email compte ici « email »</p>
   <div class="scroll"><table id="tblCanaux"></table></div>
 </div>
+</div>
+
+<div id="ecran-parcours" class="ecran"><div class="wrap">
+  <h2>Parcours d'une personne</h2>
+  <div class="lform">
+    <input type="email" id="pEmail" placeholder="email de l'inscrit / acheteur" style="min-width:260px">
+    <button class="fbtn" id="pGo">Voir</button>
+  </div>
+  <p class="note" id="pMsg"></p>
+  <div id="pTimeline"></div>
+</div></div>
+
+<div id="ecran-tunnels" class="ecran"><div class="wrap">
+  <h2>Tunnels — personnes distinctes par étape</h2>
+  <p class="note">Comptage par vid (navigateur) sur les pageviews du snippet ; les paths non classés
+  restent dans « autre ». Rappel spec §5 : sur iOS/Safari le vid vit 7 jours, les parcours longs se
+  lisent sur Chrome/Android</p>
+  <div id="tunnelsZone"></div>
+</div></div>
+
+<div id="ecran-liens" class="ecran"><div class="wrap">
+  <h2>Créer un lien court</h2>
+  <div class="lform">
+    <input id="lSlug" placeholder="slug (a-z, 0-9, tirets)">
+    <input id="lDest" placeholder="https://destination…" style="min-width:280px">
+    <select id="lCanal"><option>manychat</option><option>email</option><option>story</option>
+      <option>bio</option><option>whatsapp</option><option>ads</option><option>autre</option></select>
+    <input id="lLib" placeholder="libellé (optionnel)">
+    <button class="fbtn" id="lGo">Créer</button>
+  </div>
+  <p class="note" id="lMsg">La destination doit être dans la liste blanche du collecteur
+  (lessecretsdegeoffrey.fr, welya.io, instagram.com, wa.me, whatsapp.com, calendly.com, amzn.to, amazon.fr),
+  sinon le lien redirigera vers la home</p>
+  <h2>Liens existants</h2>
+  <div class="scroll"><table id="tblLiens"></table></div>
+</div></div>
 
 <script>
 const SB = { url: 'https://mxnrqnpvcxwdwykzzchk.supabase.co',
@@ -248,8 +299,8 @@ function ligne(a1, a2, p, cls) {
 }
 
 // filtres
-document.querySelectorAll('.fbtn').forEach(b => b.onclick = () => {
-  document.querySelectorAll('.fbtn').forEach(x => x.classList.remove('on'));
+document.querySelectorAll('.fbtn[data-j]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.fbtn[data-j]').forEach(x => x.classList.remove('on'));
   b.classList.add('on'); filtre.j = +b.dataset.j; filtre.live = ''; inscritsLive = null;
   document.getElementById('selLive').value = ''; render();
 });
@@ -274,6 +325,45 @@ document.getElementById('selLive').onchange = async e => {
   if (filtre.live === live) render();
 };
 document.getElementById('selTunnel').onchange = e => { filtre.tunnel = e.target.value; render(); };
+
+// --- onglets ---
+document.querySelectorAll('#onglets .fbtn').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#onglets .fbtn').forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  document.querySelectorAll('.ecran').forEach(s => s.classList.remove('on'));
+  document.getElementById('ecran-' + b.dataset.ecran).classList.add('on');
+  // gardes typeof : Parcours/Tunnels n'arrivent qu'aux Tasks 9-10
+  if (b.dataset.ecran === 'liens') chargerLiens();      // toujours frais
+  if (b.dataset.ecran === 'tunnels' && typeof chargerTunnels === 'function') chargerTunnels();
+});
+
+// --- ecran Liens ---
+const GO = 'https://go.lessecretsdegeoffrey.fr/';
+async function chargerLiens() {
+  const liens = await q('liens?select=*&order=created_at.desc');
+  const t = ['<tr><th>Lien</th><th>Canal</th><th>Libellé</th><th>Destination</th><th>Clics</th><th></th></tr>'];
+  liens.forEach(l => t.push('<tr><td><a href="' + GO + l.slug + '" target="_blank" rel="noopener">go…/' +
+    l.slug + '</a></td><td>' + l.canal + '</td><td>' + (l.libelle || '') +
+    '</td><td class="tronque">' + l.destination + '</td><td>' + fmt(l.clics) +
+    '</td><td><button class="fbtn" data-copie="' + GO + l.slug + '">Copier</button></td></tr>'));
+  document.getElementById('tblLiens').innerHTML = t.join('');
+  document.querySelectorAll('[data-copie]').forEach(b => b.onclick = () =>
+    navigator.clipboard.writeText(b.dataset.copie).then(() => { b.textContent = 'Copié ✓'; }));
+}
+document.getElementById('lGo').onclick = async () => {
+  const slug = document.getElementById('lSlug').value.trim().toLowerCase();
+  const destination = document.getElementById('lDest').value.trim();
+  const msg = document.getElementById('lMsg');
+  if (!/^[a-z0-9-]{1,50}$/.test(slug)) { msg.textContent = 'Slug invalide : a-z, 0-9 et tirets uniquement'; return; }
+  if (!/^https:\/\/.+/.test(destination)) { msg.textContent = 'Destination en https:// obligatoire'; return; }
+  const r = await fetch(SB.url + '/rest/v1/liens', { method: 'POST',
+    headers: { ...H, 'Content-Type': 'application/json', 'Prefer': 'return=minimal' },
+    body: JSON.stringify({ slug, destination, canal: document.getElementById('lCanal').value,
+                           libelle: document.getElementById('lLib').value.trim() || null }) });
+  msg.textContent = r.ok ? 'Créé : ' + GO + slug
+    : (r.status === 409 ? 'Ce slug existe déjà' : 'Erreur ' + r.status);
+  if (r.ok) { document.getElementById('lSlug').value = ''; chargerLiens(); }
+};
 
 if (isAuth()) boot();
 </script>
