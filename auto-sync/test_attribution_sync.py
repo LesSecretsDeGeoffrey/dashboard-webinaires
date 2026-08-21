@@ -606,8 +606,15 @@ def test_run_capi_journal_ko_apres_envoi_trace_et_releve(monkeypatch, capsys):
     assert "JOURNAL KO apres envoi ok : vente v1 event_id " + a.eid_purchase("a@b.fr", "v1") in out
 
 def test_workflow_attribution_porte_les_options_capi():
+    import re, yaml
     yml = (Path(a.HERE).parent / ".github" / "workflows" / "attribution.yml").read_text(encoding="utf-8")
     for mot in ("capi_test_code", "capi_go", "capi_retry", "--capi-test", "--capi-forcer",
-                "--seulement-capi", "--capi-retry", "CAPI_TEST_CODE"):
+                "--seulement-capi", "--capi-retry", "CAPI_TEST_CODE", "concurrency",
+                "cancel-in-progress: false", "github.event_name == 'schedule' && '--capi'"):
         assert mot in yml, mot
-    assert "concurrency" in yml and "cancel-in-progress: false" in yml
+    # le cron envoie (--capi), un dispatch n'envoie que sur capi_go ; hors expressions, la commande est NUE
+    doc = yaml.safe_load(yml)
+    run = [s for s in doc["jobs"]["attribution"]["steps"] if "run" in s][0]["run"]
+    exprs = re.findall(r"\$\{\{(.*?)\}\}", run)
+    assert exprs and all("inputs." in e or "github.event_name == 'schedule'" in e for e in exprs), exprs
+    assert re.sub(r"\$\{\{.*?\}\}", "", run).split() == ["python3", "auto-sync/attribution_sync.py"]

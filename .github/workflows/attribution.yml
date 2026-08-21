@@ -40,8 +40,10 @@ jobs:
           META_TOKEN: ${{ secrets.META_TOKEN }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
           CAPI_TEST_CODE: ${{ inputs.capi_test_code }}
+        # le cron envoie les Purchase CAPI (--capi) ; un Run workflow manuel n'envoie que si capi_go
         run: >
           python3 auto-sync/attribution_sync.py
+          ${{ github.event_name == 'schedule' && '--capi' || '' }}
           ${{ inputs.recalc == true && '--recalc' || '' }}
           ${{ inputs.capi_test_code != '' && '--capi-test "$CAPI_TEST_CODE" --capi-forcer --seulement-capi' || '' }}
           ${{ inputs.capi_go == true && '--capi' || '' }}
