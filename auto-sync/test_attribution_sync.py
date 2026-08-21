@@ -163,6 +163,62 @@ def test_attribuer_contact_sans_utm_est_organique():
     r = a.attribuer(VENTE, [], contact={"id": 1, "email": "jean@gmail.com", "fields": []})
     assert r["modele"] == "sio_contact" and r["canal"] == "organique"
 
+def test_attribuer_sio_contact_historique_dernier_payant_puis_premier():
+    """21/08 : SIO ecrase les utm_* du contact a chaque reinscription. Le robot
+    historise chaque jeu distinct (contacts_sio_utm, date de 1re observation) et
+    le repli sio_contact applique le MEME modele que les touches : dernier jeu
+    PAYANT observe avant l'achat, sinon le premier jeu connu. Le contact courant
+    (reinscription organique du 09/08) ne doit plus voler l'attribution a la pub."""
+    hist = [{"vu_le": "2026-07-20T10:00:00+00:00", "utm_source": "manychat", "utm_medium": "manychat-insta"},
+            {"vu_le": "2026-08-01T10:00:00+00:00", "utm_source": "fb", "utm_medium": "paid",
+             "utm_term": "Adset F35", "utm_content": "recyc_img"},
+            {"vu_le": "2026-08-12T10:00:00+00:00", "utm_source": "fb", "utm_medium": "paid",
+             "utm_content": "apres-achat"}]                       # APRES l'achat : ignore
+    contact = {"id": 1, "email": "jean@gmail.com", "fields": [
+        {"slug": "utm_source", "value": "email"}, {"slug": "utm_medium", "value": "newsletter"}]}
+    r = a.attribuer(VENTE, [], contact=contact, historique=hist)
+    assert r["modele"] == "sio_contact"
+    assert r["canal"] == "ads" and r["slug_crea"] == "recyc_img" and r["adset_name"] == "Adset F35"
+    assert r["premier_contact"]["utm_source"] == "manychat"
+    assert r["canal_dernier"] == "ads"            # dernier jeu AVANT l'achat, pas le contact courant
+    assert r["dernier_contact"]["utm_content"] == "recyc_img"
+    # sans jeu payant : le premier jeu connu gagne
+    r2 = a.attribuer(VENTE, [], contact=contact, historique=[hist[0]])
+    assert r2["modele"] == "sio_contact" and r2["canal"] == "manychat"
+    # historique entierement posterieur a l'achat (vente d'avant le robot) : contact courant, comme avant
+    r3 = a.attribuer(VENTE, [], contact=CONTACT, historique=[hist[2]])
+    assert r3["modele"] == "sio_contact" and r3["slug_crea"] == "recyc_img_macarons"
+
+
+def test_ligne_contact_utm_empreinte_stable_et_vide_si_aucun_utm():
+    """Une ligne contacts_sio_utm par jeu distinct : l'empreinte ne depend que des
+    utm/fbclid/fbc, pas de la date ; aucun jeu (contact organique) -> None."""
+    l1 = a.ligne_contact_utm(CONTACT)
+    l2 = a.ligne_contact_utm(dict(CONTACT, registeredAt="2030-01-01T00:00:00+00:00"))
+    assert l1 and l1["empreinte"] == l2["empreinte"] and len(l1["empreinte"]) == 32
+    assert l1["contact_id"] == str(CONTACT["id"]) and l1["utm_content"] == "recyc_img_macarons"
+    assert a.ligne_contact_utm({"id": 2, "email": "x@y.fr", "fields": []}) is None
+    autre = a.ligne_contact_utm({"id": 1, "email": "jean@gmail.com",
+                                "fields": [{"slug": "utm_source", "value": "email"}]})
+    assert autre["empreinte"] != l1["empreinte"]
+
+
+def test_historiser_utm_insert_ignore_jamais_update():
+    """L'historique ne doit JAMAIS ecraser une ligne existante (vu_le = 1re vue) :
+    Prefer resolution=ignore-duplicates sur la cle (contact_id, empreinte)."""
+    appels = []
+    orig = a.sb
+    a.sb = lambda m, path, body=None, prefer=None: appels.append((m, path, body, prefer))
+    try:
+        n = a.historiser_utm([a.ligne_contact(CONTACT), {"id": 7, "email": "o@o.fr", "fields": []}])
+    finally:
+        a.sb = orig
+    assert n == 1 and len(appels) == 1
+    m, path, body, prefer = appels[0]
+    assert m == "POST" and "contacts_sio_utm?on_conflict=contact_id,empreinte" in path
+    assert "ignore-duplicates" in prefer and body[0]["contact_id"] == "42"
+
+
 def test_attribuer_aucune():
     r = a.attribuer(VENTE, [], contact=None)
     assert r["modele"] == "aucune" and r["canal"] is None and r["canal_dernier"] is None

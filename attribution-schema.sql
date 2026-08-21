@@ -80,6 +80,22 @@ create index if not exists idx_contacts_sio_email on public.contacts_sio(email);
 create index if not exists idx_contacts_sio_registered on public.contacts_sio(registered_at);
 create index if not exists idx_contacts_sio_tags on public.contacts_sio using gin(tags);
 
+-- Historique des jeux utm d'un contact SIO (21/08/2026) : SIO ECRASE les champs utm_*
+-- a chaque reinscription ; le robot garde chaque jeu distinct avec sa date de PREMIERE
+-- observation (insert-ignore, jamais d'update). Le repli sio_contact de l'attribution
+-- y applique le modele "dernier jeu payant avant l'achat, sinon premier jeu".
+create table if not exists public.contacts_sio_utm (
+  contact_id text not null,
+  empreinte text not null,          -- md5 du tuple utm/fbclid/fbc
+  email text,
+  utm_source text, utm_medium text, utm_campaign text, utm_term text, utm_content text,
+  fbclid text, fbc text,
+  registered_at timestamptz,
+  vu_le timestamptz not null default now(),
+  primary key (contact_id, empreinte)
+);
+create index if not exists idx_contacts_sio_utm_email on public.contacts_sio_utm(email, vu_le);
+
 -- Depense Meta PAR PUB et PAR JOUR (le robot rejoue J-3 a J a chaque passage)
 create table if not exists public.depenses_ads (
   date date not null,
@@ -152,7 +168,7 @@ do $$
 declare t text;
 begin
   foreach t in array array['sync_state','visiteurs','touches','identites',
-                           'contacts_sio','depenses_ads','attribution','capi_envois']
+                           'contacts_sio','contacts_sio_utm','depenses_ads','attribution','capi_envois']
   loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "%s_read" on public.%I', t, t);

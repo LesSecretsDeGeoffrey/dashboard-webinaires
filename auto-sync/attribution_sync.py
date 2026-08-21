@@ -181,6 +181,26 @@ def ligne_contact(c):
     }
 
 
+UTM_CLES = ("utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "fbclid", "fbc")
+
+
+def ligne_contact_utm(c, vu_le=None):
+    """Ligne contacts_sio_utm : UN jeu d'utm distinct par contact, date de PREMIERE
+    observation (SIO ecrase les champs a chaque reinscription, l'historique ne
+    vit que chez nous). None si le contact ne porte aucun utm (rien a historiser)."""
+    if "fields" in c or "id" in c:          # contact brut de l'API -> ligne normalisee
+        c = ligne_contact(c)
+    jeu = {k: (c.get(k) or None) for k in UTM_CLES}
+    if not any(jeu.values()):
+        return None
+    emp = hashlib.md5("|".join(str(jeu[k] or "") for k in UTM_CLES).encode("utf-8")).hexdigest()
+    row = {"contact_id": str(c.get("contact_id")), "email": c.get("email"),
+           "empreinte": emp, "registered_at": c.get("registered_at"),
+           "vu_le": vu_le or datetime.datetime.now(datetime.timezone.utc).isoformat()}
+    row.update(jeu)
+    return row
+
+
 def _contact_jsonb(t):
     return {k: t.get(k) for k in ("ts", "type", "path", "utm_source", "utm_medium",
                                   "utm_campaign", "utm_term", "utm_content", "utm_id", "slug")}
@@ -194,8 +214,32 @@ def _iso(ts):
     return datetime.datetime.fromisoformat(s)
 
 
-def attribuer(vente, touches, contact):
-    """vente + touches de la personne + contact SIO -> ligne attribution.
+def _touches_sio(contact, historique, achat_ts):
+    """Repli sio_contact : pseudo-touches depuis l'historique des jeux utm du
+    contact (vu_le <= achat), sinon le contact courant seul (ventes d'avant le
+    robot, ou contact jamais historise). Triees par date."""
+    cands = []
+    for h in historique or []:
+        try:
+            ts = _iso(h.get("vu_le"))
+        except Exception:
+            continue
+        if ts <= achat_ts:
+            t = {k: h.get(k) for k in UTM_CLES}
+            t.update({"ts": h.get("vu_le"), "type": "sio_contact", "path": None, "utm_id": None, "slug": None})
+            cands.append((ts, t))
+    cands.sort(key=lambda x: x[0])
+    if cands:
+        return [t for _, t in cands]
+    u = utm_of(contact or {})
+    t = {k: u.get(k) for k in UTM_CLES}
+    t.update({"ts": None, "type": "sio_contact", "path": None, "utm_id": None, "slug": None})
+    return [t]
+
+
+def attribuer(vente, touches, contact, historique=None):
+    """vente + touches de la personne + contact SIO (+ historique de ses jeux utm,
+    table contacts_sio_utm) -> ligne attribution.
     PURE : aucune I/O. touches = liste brute, filtrage fenetre/achat ici."""
     achat_ts = _iso(vente["purchased_at"])
     debut = achat_ts - datetime.timedelta(days=FENETRE_J)
@@ -240,14 +284,21 @@ def attribuer(vente, touches, contact):
             "tunnel": tunnel_de(dernier.get("path"), vente.get("produit")),
             "delai_j": round((achat_ts - _iso(premier["ts"])).total_seconds() / 86400, 1),
         })
-    elif contact is not None:
-        u = utm_of(contact)
-        canal = canal_de(u.get("utm_source"), u.get("utm_medium"))
+    elif contact is not None or historique:
+        # meme modele que les touches, applique aux jeux utm connus du contact :
+        # dernier jeu PAYANT observe avant l'achat, sinon le premier jeu connu
+        cands = _touches_sio(contact, historique, achat_ts)
+        premier, dernier = cands[0], cands[-1]
+        payantes = [t for t in cands if est_payante(t)]
+        retenue = payantes[-1] if payantes else premier
+        nettoie = lambda t: ({k: v for k, v in t.items() if v is not None and k in UTM_CLES} or None)
         row.update({
             "modele": "sio_contact",
-            "premier_contact": u or None, "dernier_contact": u or None,
-            "canal": canal, "canal_dernier": canal,
-            "slug_crea": u.get("utm_content"), "adset_name": u.get("utm_term"),
+            "premier_contact": nettoie(premier), "dernier_contact": nettoie(dernier),
+            "dernier_contact_payant": nettoie(payantes[-1]) if payantes else None,
+            "canal": canal_de(retenue.get("utm_source"), retenue.get("utm_medium")),
+            "canal_dernier": canal_de(dernier.get("utm_source"), dernier.get("utm_medium")),
+            "slug_crea": retenue.get("utm_content"), "adset_name": retenue.get("utm_term"),
             "tunnel": tunnel_de(None, vente.get("produit")),
         })
     else:
@@ -415,6 +466,23 @@ def sb_upsert(table, rows, conflict):
            prefer="resolution=merge-duplicates,return=minimal")
 
 
+def sb_insert_ignore(table, rows, conflict):
+    """Insert sans ecraser : une ligne deja presente (meme cle) est laissee telle
+    quelle. C'est ce qui fait de contacts_sio_utm un historique (vu_le = 1re vue)."""
+    for i in range(0, len(rows), 500):
+        sb("POST", "/rest/v1/%s?on_conflict=%s" % (table, conflict), rows[i:i + 500],
+           prefer="resolution=ignore-duplicates,return=minimal")
+
+
+def historiser_utm(lignes_contacts):
+    """Depuis des lignes contacts_sio (ou contacts bruts) -> contacts_sio_utm.
+    Un contact sans utm n'ecrit rien."""
+    rows = [r for r in (ligne_contact_utm(c) for c in lignes_contacts) if r]
+    if rows:
+        sb_insert_ignore("contacts_sio_utm", rows, "contact_id,empreinte")
+    return len(rows)
+
+
 def sio(path, **params):
     url = "https://api.systeme.io/api/" + path + \
           ("?" + urllib.parse.urlencode(params) if params else "")
@@ -526,6 +594,7 @@ def run_contacts(dry=False):
         total += len(rows)
         if rows and not dry:
             sb_upsert("contacts_sio", rows, "contact_id")
+            historiser_utm(rows)
             _sauve_curseur(dernier)
         if len(rows) < 5000:
             break
@@ -549,6 +618,7 @@ def run_contacts(dry=False):
         for r in rows:
             vus[r["contact_id"]] = r
         sb_upsert("contacts_sio", list(vus.values()), "contact_id")
+        historiser_utm(list(vus.values()))
 
 
 def touches_de(email):
@@ -584,12 +654,15 @@ def run_attribution(recalc=False, dry=False):
         try:
             email = (v.get("email") or "").strip().lower()
             touches = touches_de(email) if email else []
-            contact = None
+            contact, historique = None, []
             if email and faut_relire_contact(touches):
                 contact = contact_par_email(email)          # passe (c)
                 if contact and not dry:
                     sb_upsert("contacts_sio", [ligne_contact(contact)], "contact_id")
-            row = attribuer(v, touches, contact)
+                    historiser_utm([contact])
+                historique = sb_all("/rest/v1/contacts_sio_utm?email=eq.%s&select=*&order=vu_le,empreinte"
+                                    % urllib.parse.quote(email)) or []
+            row = attribuer(v, touches, contact, historique)
             print("  %s %s : %s / %s / %s" % (
                 str(v["purchased_at"])[:10], email or "(sans email)",
                 row["modele"], row["canal"] or "-", row["slug_crea"] or "-"))

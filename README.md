@@ -62,9 +62,15 @@ Run local :
 dépense Meta historique · `--skip-meta` saute Meta). Tests : `python3 -m pytest auto-sync/test_attribution_sync.py`.
 
 Limites connues (phase 1) : pas de parcours par personne tant que le snippet (phase 2) n'est
-pas posé — l'attribution vient des champs du contact SIO, donc un habitué réinscrit porte les
-UTM de sa DERNIÈRE inscription ; la dépense Meta ne remonte qu'à partir du premier run
-(utiliser `--backfill` une fois pour l'historique).
+pas posé ; la dépense Meta ne remonte qu'à partir du premier run (utiliser `--backfill` une
+fois pour l'historique).
+
+Réinscriptions (21/08/2026) : SIO écrase les champs `utm_*` d'un contact à chaque nouvelle
+inscription. Le robot historise donc chaque jeu d'UTM distinct qu'il observe dans
+`contacts_sio_utm` (insert-ignore, `vu_le` = première observation, jamais mis à jour), et le
+repli `sio_contact` applique le même modèle que les touches : dernier jeu PAYANT observé avant
+l'achat, sinon premier jeu connu. L'historique ne commence qu'au premier passage du robot
+(20/08) : pour les contacts plus anciens, seul l'état courant est connu, comme avant.
 
 ## Attribution (phase 2) — parcours, tunnels, liens courts
 
