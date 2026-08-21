@@ -146,7 +146,7 @@ $$;
 -- RLS : lecture pour la cle publishable (UI protegee par mdp),
 -- ecriture reservee a la cle service (le service role CONTOURNE
 -- la RLS, donc aucune policy d'ecriture n'est necessaire).
--- Exception : liens, que le front pourra creer/editer (phase 2).
+-- Exception : liens, que le front pourra creer (phase 2) ; pas de mise a jour par la cle publishable.
 -- ============================================================
 do $$
 declare t text;
@@ -166,7 +166,6 @@ drop policy if exists "liens_insert" on public.liens;
 drop policy if exists "liens_update" on public.liens;
 create policy "liens_read"   on public.liens for select using (true);
 create policy "liens_insert" on public.liens for insert with check (true);
-create policy "liens_update" on public.liens for update using (true) with check (true);
 
 -- ============================================================
 -- VUES (une requete par ecran ; agregats PAR JOUR, le front somme)

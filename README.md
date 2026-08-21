@@ -79,13 +79,16 @@ UTM de sa DERNIÈRE inscription ; la dépense Meta ne remonte qu'à partir du pr
 - **Tunnels** : lit la vue `v_tunnel_etapes` (personnes distinctes par `path`, groupées par
   tunnel via `tunnel_de_path`). Le taux affiché est relatif à l'étape précédente DANS le
   même tunnel (ordre = plus de personnes d'abord).
-- **Liens** : création de liens courts (`liens`, table RLS insert/update ouvert à la clé
-  publishable) et suivi des clics. Le lien pointe vers `go.lessecretsdegeoffrey.fr/<slug>` ;
+- **Liens** : création de liens courts (`liens`, table RLS lecture + insert ouverts à la
+  clé publishable) et suivi des clics. Le lien pointe vers `go.lessecretsdegeoffrey.fr/<slug>` ;
   seules les destinations dans la liste blanche du collecteur (`lessecretsdegeoffrey.fr`,
   `welya.io`, `instagram.com`, `wa.me`, `whatsapp.com`, `calendly.com`, `amzn.to`,
   `amazon.fr`) sont redirigées, sinon repli sur la home.
 - **Canaux** gagne une colonne **Clics liens**, alimentée par la vue `v_clics_liens`
   (clics de liens courts par canal et par jour).
+
+Policies `liens` : lecture + insert pour la clé publishable, aucune mise à jour
+(durcissement RLS complet = hors périmètre, phase 3).
 
 Ces trois écrans dépendent du collecteur `lsdg-track` (dépôt séparé, Cloudflare Pages
 `go.lessecretsdegeoffrey.fr`) et du snippet posé sur le site — tant que l'un des deux n'est
