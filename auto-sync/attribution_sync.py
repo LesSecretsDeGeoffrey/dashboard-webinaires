@@ -69,16 +69,24 @@ FENETRE_J = 90
 # Namespace fixe pour les ids deterministes des touches 'achat' (uuid5).
 NS_ACHAT = uuid.uuid5(uuid.NAMESPACE_DNS, "achat.lessecretsdegeoffrey.fr")
 
+# ORDRE SIGNIFICATIF (premier fragment trouve gagne) : les pages du format call
+# vivent SOUS le prefixe /paiementfondationspro (…pro997, …pro697, releve SIO
+# 21/08), elles doivent donc preceder le generique 'live'. /paiementfondationspro197
+# (downsell prive ancre sur le 497 du live, dans le tunnel du webinaire) reste 'live'.
 TUNNELS_PATH = [
+    ("/paiementfondationspro997", "call"),
+    ("/paiementfondationspro697", "call"),
+    ("/paiementmethode997", "call"),
     ("/paiementfondationspro", "live"),
     ("/paiementbook", "ebook"),
     ("/maitrise", "ebook"),
-    ("/paiementmethode997", "call"),
 ]
 TUNNELS_PRODUIT = [
-    # '997' AVANT 'fondations' : le produit 997 s'appelle sans doute aussi
-    # 'Methode Fondations ...' — verifier le libelle reel au dry-run (Task 8)
-    ("997", "call"),
+    # inner_name reels des plans call (SIO 21/08) AVANT 'fondations'/'mfp' :
+    # 'La Méthode Fondations Pro 997€', '… 3*997€', 'MFP 10*100',
+    # 'MFP 697€', 'MFP 3*233', 'MFP 7*100'
+    ("997", "call"), ("697", "call"),
+    ("10*100", "call"), ("3*233", "call"), ("7*100", "call"),
     ("fondations", "live"), ("mfp", "live"),
     ("ebook", "ebook"), ("90 jours", "ebook"), ("book", "ebook"),
     ("macaron", "lowticket"),

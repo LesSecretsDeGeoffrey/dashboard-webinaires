@@ -275,9 +275,14 @@ grant execute on function public.clic_lien(text) to service_role;
 create or replace function public.tunnel_de_path(p text) returns text
 language sql immutable as $$
   select case
+    -- ordre significatif : les pages call (…pro997, …pro697) vivent sous le
+    -- prefixe /paiementfondationspro, elles passent AVANT le generique 'live'
+    -- (meme ordre que TUNNELS_PATH dans attribution_sync.py)
+    when lower(p) like '%/paiementfondationspro997%'
+      or lower(p) like '%/paiementfondationspro697%'
+      or lower(p) like '%/paiementmethode997%'                                then 'call'
     when lower(p) like '%/paiementfondationspro%' or lower(p) like '%/live2%' then 'live'
     when lower(p) like '%/paiementbook%' or lower(p) like '%/maitrise%'       then 'ebook'
-    when lower(p) like '%/paiementmethode997%'                                then 'call'
     else 'autre'
   end
 $$;

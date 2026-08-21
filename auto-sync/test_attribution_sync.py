@@ -51,6 +51,23 @@ def test_tunnel_par_path():
     assert a.tunnel_de("/maitrise", None) == "ebook"
     assert a.tunnel_de("/paiementmethode997", None) == "call"
 
+
+def test_tunnel_pages_call_997_697_avant_le_generique():
+    """21/08 : les pages de paiement du format call vivent SOUS le prefixe
+    /paiementfondationspro (…pro997, …pro697). Le fragment generique 'live'
+    doit donc passer APRES les fragments specifiques, sinon une vente call
+    est classee 'live' en silence. La 197 (downsell prive ancre sur le 497 du
+    live, dans le tunnel du webinaire) reste 'live' volontairement."""
+    assert a.tunnel_de("https://www.lessecretsdegeoffrey.fr/paiementfondationspro997", None) == "call"
+    assert a.tunnel_de("/paiementfondationspro697", None) == "call"
+    assert a.tunnel_de("/paiementfondationspro197", None) == "live"
+    assert a.tunnel_de("/paiementfondationspro", None) == "live"
+    # l'ordre de TUNNELS_PATH est une garantie, pas un hasard
+    idx = {frag: i for i, (frag, _) in enumerate(a.TUNNELS_PATH)}
+    assert idx["/paiementfondationspro997"] < idx["/paiementfondationspro"]
+    assert idx["/paiementfondationspro697"] < idx["/paiementfondationspro"]
+
+
 def test_tunnel_par_produit_quand_pas_de_path():
     assert a.tunnel_de(None, "La Methode Fondations Pro") == "live"
     assert a.tunnel_de("", "Maitriser la patisserie en 90 jours (ebook)") == "ebook"
@@ -250,6 +267,17 @@ def test_contacts_du_tag_pagine():
 
 def test_tunnel_997_prime_sur_fondations():
     assert a.tunnel_de(None, "Methode Fondations Pro 997") == "call"
+
+
+def test_tunnel_produits_call_reels_sans_path():
+    """inner_name reels releves dans SIO le 21/08 (plans des pages 997 et 697) :
+    sans pageview connu, le produit seul doit suffire a classer la vente 'call'."""
+    for produit in ("La Méthode Fondations Pro 997€", "La Méthode Fondations Pro 3*997€",
+                    "MFP 10*100", "MFP 697€", "MFP 3*233", "MFP 7*100"):
+        assert a.tunnel_de(None, produit) == "call", produit
+    # les plans du live restent 'live'
+    for produit in ("MFP 497€", "MFP 3x166€", "MFP 4x125", "La Méthode Fondations Pro 197"):
+        assert a.tunnel_de(None, produit) == "live", produit
 
 
 def test_faut_relire_contact():
