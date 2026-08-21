@@ -358,6 +358,7 @@ async function creerLien() {
   const slug = document.getElementById('lSlug').value.trim().toLowerCase();
   const destination = document.getElementById('lDest').value.trim();
   const msg = document.getElementById('lMsg'), btn = document.getElementById('lGo');
+  if (btn.disabled) return;
   if (!/^[a-z0-9-]{1,50}$/.test(slug)) { msg.textContent = 'Slug invalide : a-z, 0-9 et tirets uniquement'; return; }
   if (!/^https:\/\/.+/.test(destination)) { msg.textContent = 'Destination en https:// obligatoire'; return; }
   btn.disabled = true;
