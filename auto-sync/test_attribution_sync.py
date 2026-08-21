@@ -180,10 +180,18 @@ def test_attribuer_canal_dernier_story_puis_pages_internes():
     assert r["canal_dernier"] == "story"
 
 def test_attribuer_lien_court_compte_comme_source():
-    touches = [T("2026-08-02T10:00:00+00:00", slug="promo", src="manychat", med="lien"),
+    # Lien court SEUL (aucun utm_source/medium) : compte deja comme source pour
+    # dernier_contact, meme si canal_de ne sait pas le classer (organique).
+    touches = [T("2026-08-02T10:00:00+00:00", slug="promo"),
                T("2026-08-09T10:00:00+00:00")]
     r = a.attribuer(VENTE, touches, contact=None)
-    assert r["canal_dernier"] == "manychat"
+    assert r["dernier_contact"]["slug"] == "promo"
+    assert r["canal_dernier"] == "organique"
+    # Cas reel (click_go) : lien court + utm manychat/lien -> classe correctement
+    touches2 = [T("2026-08-02T10:00:00+00:00", slug="promo", src="manychat", med="lien"),
+                T("2026-08-09T10:00:00+00:00")]
+    r2 = a.attribuer(VENTE, touches2, contact=None)
+    assert r2["canal_dernier"] == "manychat"
 
 def test_attribuer_visite_directe_reste_organique():
     touches = [T("2026-08-02T10:00:00+00:00"), T("2026-08-09T10:00:00+00:00")]
@@ -267,8 +275,11 @@ def test_contact_par_email_limit_api():
 
 
 def test_touches_de_pagine():
-    """Plafond Supabase (1000 lignes/reponse) : touches_de doit pagine via sb_all."""
+    """Plafond Supabase (1000 lignes/reponse) : touches_de doit pagine via sb_all,
+    avec un ordre total (ts,id) pour un offset deterministe."""
+    seen = []
     def fake_sb(m, p, body=None, prefer=None):
+        seen.append(p)
         if "identites" in p:
             return []
         debut, n = (0, 1000) if "offset=0&" in p else (1000, 1) if "offset=1000" in p else (0, 0)
@@ -276,6 +287,7 @@ def test_touches_de_pagine():
     a.sb, orig = fake_sb, a.sb
     try:
         assert len(a.touches_de("x@y.fr")) == 1001
+        assert all("order=ts,id" in p for p in seen if "touches" in p)
     finally:
         a.sb = orig
 
