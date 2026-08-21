@@ -99,9 +99,11 @@ def test_ligne_contact_source_url_en_repli():
 
 # --- attribuer : LE coeur. vente + touches + contact -> ligne attribution ---
 
-def T(ts, src=None, med=None, term=None, content=None, typ="pageview", path="/", vid="v1"):
+def T(ts, src=None, med=None, term=None, content=None, typ="pageview", path="/", vid="v1",
+      slug=None):
     return {"ts": ts, "utm_source": src, "utm_medium": med, "utm_term": term,
-            "utm_content": content, "utm_id": None, "type": typ, "path": path, "vid": vid}
+            "utm_content": content, "utm_id": None, "type": typ, "path": path, "vid": vid,
+            "slug": slug}
 
 VENTE = {"id": "9f1b2c3d-0000-0000-0000-000000000001", "email": "Jean@Gmail.com",
          "montant": 497, "produit": "La Methode Fondations Pro",
@@ -153,6 +155,41 @@ def test_attribuer_tunnel_et_delai():
     r = a.attribuer(VENTE, touches, contact=None)
     assert r["tunnel"] == "live"     # produit Fondations (le path /live2 n'est pas une page de paiement)
     assert r["delai_j"] == 7.0
+
+def test_attribuer_dernier_contact_ignore_les_touches_sans_source():
+    """Terrain snippet : landing avec UTM -> pages internes SANS UTM -> identite
+    au checkout SANS UTM. canal_dernier doit rester 'ads', pas degeneres en
+    'organique' (regression vs phase 1 sur l'ecran Canaux)."""
+    touches = [T("2026-08-02T10:00:00+00:00", src="fb", med="paid", term="Adset F35",
+                 content="recyc_img", path="/live2"),
+               T("2026-08-05T10:00:00+00:00", path="/paiementfondationspro"),
+               T("2026-08-09T20:00:00+00:00", typ="identite", path="/paiementfondationspro")]
+    r = a.attribuer(VENTE, touches, contact=None)
+    assert r["modele"] == "last_paid" and r["canal"] == "ads"
+    assert r["canal_dernier"] == "ads"
+    assert r["dernier_contact"]["utm_source"] == "fb"
+    assert r["tunnel"] == "live"     # derive de la VRAIE derniere touche (son path)
+    assert r["nb_touches"] == 3
+
+def test_attribuer_canal_dernier_story_puis_pages_internes():
+    touches = [T("2026-08-02T10:00:00+00:00", src="story"),
+               T("2026-08-05T10:00:00+00:00"),
+               T("2026-08-09T10:00:00+00:00")]
+    r = a.attribuer(VENTE, touches, contact=None)
+    assert r["modele"] == "first" and r["canal"] == "story"
+    assert r["canal_dernier"] == "story"
+
+def test_attribuer_lien_court_compte_comme_source():
+    touches = [T("2026-08-02T10:00:00+00:00", slug="promo", src="manychat", med="lien"),
+               T("2026-08-09T10:00:00+00:00")]
+    r = a.attribuer(VENTE, touches, contact=None)
+    assert r["canal_dernier"] == "manychat"
+
+def test_attribuer_visite_directe_reste_organique():
+    touches = [T("2026-08-02T10:00:00+00:00"), T("2026-08-09T10:00:00+00:00")]
+    r = a.attribuer(VENTE, touches, contact=None)
+    assert r["canal"] == "organique" and r["canal_dernier"] == "organique"
+
 
 def test_touche_achat_id_deterministe():
     i1 = a.achat_touche_id(VENTE["id"])
@@ -227,6 +264,20 @@ def test_contact_par_email_limit_api():
         return {"items": [{"id": 7, "email": "x@y.fr"}]}
     c = a.contact_par_email("x@y.fr", sio_fn=fake_sio)
     assert c["id"] == 7 and vus["email"] == "x@y.fr"
+
+
+def test_touches_de_pagine():
+    """Plafond Supabase (1000 lignes/reponse) : touches_de doit pagine via sb_all."""
+    def fake_sb(m, p, body=None, prefer=None):
+        if "identites" in p:
+            return []
+        debut, n = (0, 1000) if "offset=0&" in p else (1000, 1) if "offset=1000" in p else (0, 0)
+        return [{"id": str(debut + i), "ts": "t"} for i in range(n)]
+    a.sb, orig = fake_sb, a.sb
+    try:
+        assert len(a.touches_de("x@y.fr")) == 1001
+    finally:
+        a.sb = orig
 
 
 def test_tunnel_fragments_presents_dans_le_sql():

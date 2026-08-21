@@ -92,6 +92,15 @@ def est_payante(t):
     return canal_de(t.get("utm_source"), t.get("utm_medium")) == "ads"
 
 
+def porte_une_source(t):
+    """Une touche 'porte' un canal identifiable (utm_source/medium ou lien court).
+    Les pages internes et l'identite au checkout n'en portent pas : sans ce
+    filtre, canal_dernier degenererait en 'organique' sur quasi toutes les
+    ventes de l'ere snippet (landing avec UTM -> pages internes -> checkout,
+    aucune des deux dernieres touches n'a d'UTM)."""
+    return bool(t.get("utm_source") or t.get("utm_medium") or t.get("slug"))
+
+
 def tunnel_de(path, produit):
     p = (path or "").lower()
     for frag, t in TUNNELS_PATH:
@@ -188,16 +197,22 @@ def attribuer(vente, touches, contact):
 
     if utiles:
         premier, dernier = utiles[0], utiles[-1]
+        # "Dernier contact" (canal_dernier, ecran Canaux) = la derniere touche
+        # PORTANT une source, pas forcement utiles[-1] : les pages internes et
+        # l'identite au checkout n'ont pas d'UTM (voir porte_une_source). Repli
+        # sur utiles[-1] pour une visite 100% directe (organique legitime).
+        avec_source = [t for t in utiles if porte_une_source(t)]
+        dernier_source = avec_source[-1] if avec_source else dernier
         payantes = [t for t in utiles if est_payante(t)]
         retenue = payantes[-1] if payantes else premier
         row.update({
             "modele": "last_paid" if payantes else "first",
             "vid": retenue.get("vid") or dernier.get("vid"),
             "premier_contact": _contact_jsonb(premier),
-            "dernier_contact": _contact_jsonb(dernier),
+            "dernier_contact": _contact_jsonb(dernier_source),
             "dernier_contact_payant": _contact_jsonb(payantes[-1]) if payantes else None,
             "canal": canal_de(retenue.get("utm_source"), retenue.get("utm_medium")),
-            "canal_dernier": canal_de(dernier.get("utm_source"), dernier.get("utm_medium")),
+            "canal_dernier": canal_de(dernier_source.get("utm_source"), dernier_source.get("utm_medium")),
             "ad_id": retenue.get("utm_id"),
             "slug_crea": retenue.get("utm_content"),
             "adset_name": retenue.get("utm_term"),
@@ -395,10 +410,10 @@ def touches_de(email):
     plus les touches portant directement l'email."""
     vids = [r["vid"] for r in
             (sb("GET", "/rest/v1/identites?email=eq.%s&select=vid" % urllib.parse.quote(email)) or [])]
-    touches = list(sb("GET", "/rest/v1/touches?email=eq.%s&select=*" % urllib.parse.quote(email)) or [])
+    touches = list(sb_all("/rest/v1/touches?email=eq.%s&select=*&order=ts" % urllib.parse.quote(email)) or [])
     if vids:
         q = ",".join('"%s"' % v for v in vids)
-        touches += sb("GET", "/rest/v1/touches?vid=in.(%s)&select=*" % urllib.parse.quote(q)) or []
+        touches += sb_all("/rest/v1/touches?vid=in.(%s)&select=*&order=ts" % urllib.parse.quote(q)) or []
     vues = {}
     for t in touches:
         vues[t["id"]] = t
