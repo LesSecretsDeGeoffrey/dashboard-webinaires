@@ -365,6 +365,38 @@ document.getElementById('lGo').onclick = async () => {
   if (r.ok) { document.getElementById('lSlug').value = ''; chargerLiens(); }
 };
 
+// --- ecran Parcours ---
+document.getElementById('pGo').onclick = parcours;
+document.getElementById('pEmail').addEventListener('keydown', e => { if (e.key === 'Enter') parcours(); });
+async function parcours() {
+  const email = document.getElementById('pEmail').value.trim().toLowerCase();
+  const msg = document.getElementById('pMsg'), zone = document.getElementById('pTimeline');
+  zone.innerHTML = ''; if (!email) return;
+  msg.textContent = 'Chargement…';
+  const enc = encodeURIComponent(email);
+  const vids = (await q('identites?email=eq.' + enc + '&select=vid')).map(r => r.vid);
+  let touches = await q('touches?email=eq.' + enc + '&select=*');
+  if (vids.length) {
+    const dans = encodeURIComponent(vids.map(v => '"' + v + '"').join(','));
+    touches = touches.concat(await q('touches?vid=in.(' + dans + ')&select=*'));
+  }
+  const vues = {}; touches.forEach(t => { vues[t.id] = t; });
+  const liste = Object.values(vues).sort((a, b) => (a.ts < b.ts ? -1 : 1));
+  msg.textContent = liste.length + ' touche(s) · ' + (vids.length || 'aucun') + ' vid';
+  zone.innerHTML = liste.map(t => {
+    const quand = new Date(t.ts).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
+    const source = t.slug ? 'go/' + t.slug
+      : [t.utm_source, t.utm_medium].filter(Boolean).join(' / ') || (t.referrer || '');
+    const detail = t.type === 'achat'
+      ? ((t.extra || {}).produit || '') + ' · ' + fmt((t.extra || {}).montant || 0) + ' €'
+      : (t.type === 'identite' ? (t.contexte || '') + ' ' + (t.email || '')
+                               : (t.path || t.url || ''));
+    return '<div class="ptouche t-' + t.type + '"><b>' + quand + '</b> · ' + t.type + ' · ' +
+      detail + (source ? ' <span class="note">(' + source + ')</span>' : '') + '</div>';
+  }).join('') || '<p class="note">Aucune touche pour cet email — acheteur d\'avant le snippet ' +
+    '(son attribution vit quand même dans Pubs, modèle sio_contact)</p>';
+}
+
 if (isAuth()) boot();
 </script>
 </body>
