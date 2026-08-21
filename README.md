@@ -65,3 +65,33 @@ Limites connues (phase 1) : pas de parcours par personne tant que le snippet (ph
 pas posé — l'attribution vient des champs du contact SIO, donc un habitué réinscrit porte les
 UTM de sa DERNIÈRE inscription ; la dépense Meta ne remonte qu'à partir du premier run
 (utiliser `--backfill` une fois pour l'historique).
+
+## Attribution (phase 2) — parcours, tunnels, liens courts
+
+`attribution.html` gagne une barre d'onglets : **Pubs · Canaux** (écran phase 1, inchangé),
+**Parcours**, **Tunnels**, **Liens**.
+
+- **Parcours** : email → `identites` (vids associés) → toutes les `touches` de ces vids,
+  triées en timeline (pageview / identite / click_go / achat). Sert à vérifier à la main le
+  chemin d'une personne. Un acheteur d'avant la pose du snippet n'a aucune touche — son
+  attribution reste correcte via le modèle `sio_contact` de la phase 1, seul l'écran Parcours
+  est vide pour lui.
+- **Tunnels** : lit la vue `v_tunnel_etapes` (personnes distinctes par `path`, groupées par
+  tunnel via `tunnel_de_path`). Le taux affiché est relatif à l'étape précédente DANS le
+  même tunnel (ordre = plus de personnes d'abord).
+- **Liens** : création de liens courts (`liens`, table RLS insert/update ouvert à la clé
+  publishable) et suivi des clics. Le lien pointe vers `go.lessecretsdegeoffrey.fr/<slug>` ;
+  seules les destinations dans la liste blanche du collecteur (`lessecretsdegeoffrey.fr`,
+  `welya.io`, `instagram.com`, `wa.me`, `whatsapp.com`, `calendly.com`, `amzn.to`,
+  `amazon.fr`) sont redirigées, sinon repli sur la home.
+- **Canaux** gagne une colonne **Clics liens**, alimentée par la vue `v_clics_liens`
+  (clics de liens courts par canal et par jour).
+
+Ces trois écrans dépendent du collecteur `lsdg-track` (dépôt séparé, Cloudflare Pages
+`go.lessecretsdegeoffrey.fr`) et du snippet posé sur le site — tant que l'un des deux n'est
+pas en service, les écrans restent vides sans casser la page (`q()` rend `[]` sur un 404).
+
+⚠️ Les vues et fonctions phase 2 (`v_tunnel_etapes`, `v_clics_liens`, `upsert_visiteur`,
+`clic_lien`, `tunnel_de_path`) vivent dans le même `attribution-schema.sql` que la phase 1 —
+**rejouer le fichier EN ENTIER dans Supabase > SQL Editor** après toute modification, comme
+en phase 1 (schéma idempotent, pas de migration séparée).

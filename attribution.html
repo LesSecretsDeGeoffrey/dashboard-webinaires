@@ -151,7 +151,7 @@ function tryAuth() {
 }
 
 // --- data ---
-let pubsJour = [], canauxV = [], canauxI = [], attribs = [], webinaires = [], lives = {};
+let pubsJour = [], canauxV = [], canauxI = [], attribs = [], webinaires = [], lives = {}, clicsL = [];
 let inscritsLive = null;   // rempli quand un live est choisi : comptes par TAG (regle /cpl)
 let filtre = { j: 7, live: '', tunnel: '' };
 
@@ -171,7 +171,7 @@ async function q(path) {
 
 async function boot() {
   document.getElementById('auth').classList.add('hidden');
-  [pubsJour, canauxV, canauxI, attribs, webinaires, lives] = await Promise.all([
+  [pubsJour, canauxV, canauxI, attribs, webinaires, lives, clicsL] = await Promise.all([
     q('v_pubs?select=*&order=date'),
     q('v_canaux?select=*'),
     q('v_canaux_inscrits?select=*'),
@@ -179,6 +179,7 @@ async function boot() {
     q('attribution?select=canal,canal_dernier,tunnel,slug_crea,adset_name,modele,ventes(purchased_at,montant)'),
     q('webinaires?select=date&order=date'),
     fetch('auto-sync/lives.json').then(r => r.ok ? r.json() : {}).catch(() => ({})),
+    q('v_clics_liens?select=*'),
   ]);
   attribs.forEach(x => {
     const ts = (x.ventes || {}).purchased_at;
@@ -275,10 +276,12 @@ function render() {
   } else {
     canauxI.filter(dedans).forEach(r => { ci[r.canal] = (ci[r.canal] || 0) + +r.inscrits; });
   }
-  const cs = [...new Set([...Object.keys(cv), ...Object.keys(ci)])].sort();
-  const c = ['<tr><th>Canal</th><th>Inscrits</th><th>Ventes</th><th>CA</th></tr>'];
-  cs.forEach(k => c.push('<tr><td>' + k + '</td><td>' + fmt(ci[k] || 0) + '</td><td>' +
-    fmt((cv[k] || {}).v || 0) + '</td><td>' + fmt((cv[k] || {}).ca || 0) + ' €</td></tr>'));
+  const cl = {};
+  clicsL.filter(dedans).forEach(r => { cl[r.canal] = (cl[r.canal] || 0) + +r.clics; });
+  const cs = [...new Set([...Object.keys(cv), ...Object.keys(ci), ...Object.keys(cl)])].sort();
+  const c = ['<tr><th>Canal</th><th>Clics liens</th><th>Inscrits</th><th>Ventes</th><th>CA</th></tr>'];
+  cs.forEach(k => c.push('<tr><td>' + k + '</td><td>' + fmt(cl[k] || 0) + '</td><td>' + fmt(ci[k] || 0) +
+    '</td><td>' + fmt((cv[k] || {}).v || 0) + '</td><td>' + fmt((cv[k] || {}).ca || 0) + ' €</td></tr>'));
   document.getElementById('tblCanaux').innerHTML = c.join('');
 
   // KPIs
@@ -395,6 +398,24 @@ async function parcours() {
       detail + (source ? ' <span class="note">(' + source + ')</span>' : '') + '</div>';
   }).join('') || '<p class="note">Aucune touche pour cet email — acheteur d\'avant le snippet ' +
     '(son attribution vit quand même dans Pubs, modèle sio_contact)</p>';
+}
+
+// --- ecran Tunnels ---
+async function chargerTunnels() {
+  const rows = await q('v_tunnel_etapes?select=*&order=personnes.desc');
+  const par = {};
+  rows.forEach(r => (par[r.tunnel] = par[r.tunnel] || []).push(r));
+  document.getElementById('tunnelsZone').innerHTML = Object.keys(par).sort().map(tu => {
+    const l = par[tu];
+    let html = '<h2>' + tu + '</h2><div class="scroll"><table><tr><th>Étape (path)</th>' +
+               '<th>Personnes</th><th>Vues</th><th>Taux vs étape préc.</th></tr>';
+    l.forEach((r, i) => {
+      const taux = i ? Math.round(100 * r.personnes / l[i - 1].personnes) + ' %' : '—';
+      html += '<tr><td>' + r.path + '</td><td>' + fmt(r.personnes) + '</td><td>' +
+              fmt(r.vues) + '</td><td>' + taux + '</td></tr>';
+    });
+    return html + '</table></div>';
+  }).join('') || '<p class="note">Aucune pageview encore (snippet pas collé ?)</p>';
 }
 
 if (isAuth()) boot();
