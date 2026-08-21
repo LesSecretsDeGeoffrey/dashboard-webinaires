@@ -6,6 +6,7 @@ Quatre passes, toutes idempotentes (upsert par cle, relançable a volonte) :
   1. Meta insights level=ad, J-3 -> J    -> depenses_ads   (spend par pub/jour)
   2. Contacts Systeme.io (3 passes)      -> contacts_sio   (utm de l'inscription)
   3. Ventes sans attribution             -> attribution    (+ touche 'achat')
+  3b. RDV Calendly (table rdv, via Make)  -> attribution_rdv (+ touche 'rdv', pont identites)
   4. Purchase CAPI (ventes attribuees, <= 7 j) -> capi_envois
 
 En phase 1, la table touches est vide : le modele retombe toujours sur
@@ -308,6 +309,42 @@ def attribuer(vente, touches, contact, historique=None):
 
 def achat_touche_id(vente_id):
     return str(uuid.uuid5(NS_ACHAT, str(vente_id)))
+
+
+# ---------------------------------------------------------------- RDV Calendly (21/08)
+
+NS_RDV = uuid.UUID("0f6d5e4c-2b1a-4d3c-9e8f-7a6b5c4d3e2f")
+
+
+def touche_rdv(rdv, vid):
+    """Touche 'rdv' : id deterministe (rejouable), datee de la RESERVATION
+    (cree_le), email normalise, utm du tracking Calendly, extra pour Parcours."""
+    return {
+        "id": str(uuid.uuid5(NS_RDV, rdv["invitee_uri"])), "vid": vid,
+        "ts": rdv.get("cree_le"), "type": "rdv",
+        "email": (rdv.get("email") or "").strip().lower() or None,
+        "utm_source": rdv.get("utm_source"), "utm_medium": rdv.get("utm_medium"),
+        "utm_campaign": rdv.get("utm_campaign"), "utm_term": rdv.get("utm_term"),
+        "utm_content": rdv.get("utm_content"),
+        "extra": {"invitee_uri": rdv["invitee_uri"], "event": rdv.get("event_nom"),
+                  "statut": rdv.get("statut"), "debut": rdv.get("debut")},
+    }
+
+
+def vid_du_rdv(rdv, vids_connus):
+    """salesforce_uuid pose par le snippet, sinon le 1er vid connu pour l'email."""
+    return (rdv.get("vid") or "").strip() or (vids_connus[0] if vids_connus else None)
+
+
+def attribuer_rdv(rdv, touches, contact, historique=None):
+    """Meme modele que les ventes, sur une pseudo-vente datee de la reservation.
+    Cle = invitee_uri, tunnel force a 'call'."""
+    pseudo = {"id": rdv["invitee_uri"], "email": rdv.get("email"),
+              "purchased_at": rdv.get("cree_le"), "produit": rdv.get("event_nom")}
+    row = attribuer(pseudo, touches, contact, historique)
+    row["invitee_uri"] = row.pop("vente_id")
+    row["tunnel"] = "call"
+    return row
 
 
 # ---------------------------------------------------------------- Purchase CAPI (phase 3)
@@ -621,11 +658,15 @@ def run_contacts(dry=False):
         historiser_utm(list(vus.values()))
 
 
+def vids_de(email):
+    return [r["vid"] for r in
+            (sb("GET", "/rest/v1/identites?email=eq.%s&select=vid" % urllib.parse.quote(email)) or [])]
+
+
 def touches_de(email):
     """Toutes les touches de la personne : email -> vids (identites) -> touches,
     plus les touches portant directement l'email."""
-    vids = [r["vid"] for r in
-            (sb("GET", "/rest/v1/identites?email=eq.%s&select=vid" % urllib.parse.quote(email)) or [])]
+    vids = vids_de(email)
     touches = list(sb_all("/rest/v1/touches?email=eq.%s&select=*&order=ts,id" % urllib.parse.quote(email)) or [])
     if vids:
         q = ",".join('"%s"' % v for v in vids)
@@ -680,6 +721,54 @@ def run_attribution(recalc=False, dry=False):
                                          "source": "vente"}], "vid,email")
         except Exception as e:
             print("  ERREUR vente %s : %s" % (v.get("id"), e))
+            continue
+
+
+def run_rdv(recalc=False, dry=False):
+    """RDV Calendly (table rdv, ecrite par Make) -> touche 'rdv' + pont identites
+    (vid Calendly <-> email) + attribution_rdv. Un RDV est (re)traite s'il n'a
+    pas de ligne attribution_rdv ou si Make l'a mis a jour depuis (annulation)."""
+    rdvs = sb_all("/rest/v1/rdv?select=*&order=cree_le") or []
+    deja = {} if recalc else {r["invitee_uri"]: r["calcule_le"] for r in
+                              (sb_all("/rest/v1/attribution_rdv?select=invitee_uri,calcule_le"
+                                      "&order=invitee_uri") or [])}
+
+    def a_refaire(r):
+        if r["invitee_uri"] not in deja:
+            return True
+        try:
+            return bool(r.get("maj_le")) and _iso(r["maj_le"]) > _iso(deja[r["invitee_uri"]])
+        except Exception:
+            return True
+
+    a_faire = [r for r in rdvs if a_refaire(r)]
+    print("RDV : %d a traiter / %d en base" % (len(a_faire), len(rdvs)))
+    for r in a_faire:
+        try:
+            email = (r.get("email") or "").strip().lower()
+            vids = vids_de(email) if email else []
+            vid = vid_du_rdv(r, vids)
+            if vid and email and vid not in vids and not dry:
+                # pont Calendly : le vid du snippet rejoint l'email de la reservation
+                sb_upsert("identites", [{"vid": vid, "email": email, "source": "calendly"}], "vid,email")
+            touches = touches_de(email) if email else []
+            contact, historique = None, []
+            if email and faut_relire_contact(touches):
+                contact = contact_par_email(email)
+                historique = sb_all("/rest/v1/contacts_sio_utm?email=eq.%s&select=*&order=vu_le,empreinte"
+                                    % urllib.parse.quote(email)) or []
+            row = attribuer_rdv(r, touches, contact, historique)
+            if not row.get("vid"):
+                row["vid"] = vid
+            print("  %s %s : %s / %s / %s / %s" % (
+                str(r.get("cree_le"))[:10], email or "(sans email)", r.get("statut"),
+                row["modele"], row["canal"] or "-", row["slug_crea"] or "-"))
+            if dry:
+                continue
+            sb_upsert("touches", [touche_rdv(r, vid)], "id")
+            sb_upsert("attribution_rdv", [row], "invitee_uri")
+        except Exception as e:
+            print("  ERREUR rdv %s : %s" % (r.get("invitee_uri"), e))
             continue
 
 
@@ -831,6 +920,11 @@ if __name__ == "__main__":
             print("SIO contacts skip (%s)" % str(e)[:200])
             echecs.append("contacts")
         run_attribution(recalc="--recalc" in sys.argv, dry=dry)
+        try:
+            run_rdv(recalc="--recalc" in sys.argv, dry=dry)
+        except Exception as e:
+            print("RDV skip (%s)" % str(e)[:200])
+            echecs.append("rdv")
     if capi["mode"]:
         try:
             if run_capi(capi, dry=dry):

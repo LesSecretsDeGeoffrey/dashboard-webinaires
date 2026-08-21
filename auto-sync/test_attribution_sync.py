@@ -219,6 +219,76 @@ def test_historiser_utm_insert_ignore_jamais_update():
     assert "ignore-duplicates" in prefer and body[0]["contact_id"] == "42"
 
 
+# --- RDV Calendly (21/08) ---
+
+RDV = {"invitee_uri": "https://api.calendly.com/scheduled_events/EV1/invitees/INV1",
+       "email": "Jean@Gmail.com", "prenom": "Jean", "event_nom": "Candidature MFP",
+       "debut": "2026-08-12T09:00:00+00:00", "statut": "pris",
+       "cree_le": "2026-08-09T20:00:00+00:00", "vid": "v-cal", "utm_source": "fb"}
+
+def test_rdv_touche_deterministe_et_portee():
+    """La touche 'rdv' est rejouable (id = uuid5 de l'invitee_uri), datee de la
+    reservation (pas du creneau), portee par le vid Calendly, et son extra dit
+    l'event + le statut + le creneau pour l'ecran Parcours."""
+    t1 = a.touche_rdv(RDV, vid="v-cal")
+    t2 = a.touche_rdv(dict(RDV, statut="annule"), vid="v-cal")
+    assert t1["id"] == t2["id"] and t1["type"] == "rdv" and t1["vid"] == "v-cal"
+    assert t1["ts"] == RDV["cree_le"] and t1["email"] == "jean@gmail.com"
+    assert t1["extra"]["event"] == "Candidature MFP" and t2["extra"]["statut"] == "annule"
+    assert t1["extra"]["debut"] == RDV["debut"] and t1["utm_source"] == "fb"
+
+def test_rdv_attribution_reutilise_le_modele_des_ventes():
+    """attribuer_rdv = attribuer() sur une pseudo-vente : cle invitee_uri,
+    date = reservation, tunnel force a 'call'."""
+    touches = [T("2026-08-01T10:00:00+00:00", src="fb", med="paid", term="Adset F35", content="recyc_img"),
+               T("2026-08-09T10:00:00+00:00", src="email")]
+    r = a.attribuer_rdv(RDV, touches, contact=None)
+    assert r["invitee_uri"] == RDV["invitee_uri"] and "vente_id" not in r
+    assert r["modele"] == "last_paid" and r["slug_crea"] == "recyc_img" and r["tunnel"] == "call"
+    assert r["email"] == "jean@gmail.com"
+    # RDV d'une personne inconnue : ligne 'aucune' quand meme
+    r2 = a.attribuer_rdv(dict(RDV, email=None), [], contact=None)
+    assert r2["modele"] == "aucune" and r2["tunnel"] == "call"
+
+def test_rdv_vid_retenu_calendly_puis_identites():
+    """Le vid du RDV = salesforce_uuid si present, sinon le vid deja connu pour
+    l'email (identites), sinon None."""
+    assert a.vid_du_rdv(RDV, ["v-autre"]) == "v-cal"
+    assert a.vid_du_rdv(dict(RDV, vid=None), ["v-autre"]) == "v-autre"
+    assert a.vid_du_rdv(dict(RDV, vid=""), []) is None
+
+
+def test_run_rdv_ecrit_identite_touche_et_attribution():
+    """Passe 3b de bout en bout sur des I/O simulees : 1 RDV neuf avec vid Calendly
+    -> pont identites (source calendly), touche 'rdv', ligne attribution_rdv ;
+    un RDV deja traite et non modifie n'est pas refait."""
+    ecrits = []
+    orig_all, orig_sb, orig_contact = a.sb_all, a.sb, a.contact_par_email
+    def faux_all(path):
+        if path.startswith("/rest/v1/rdv?"):
+            return [RDV, dict(RDV, invitee_uri="INV2", email="deja@x.fr", maj_le="2026-08-09T20:00:00+00:00")]
+        if path.startswith("/rest/v1/attribution_rdv?"):
+            return [{"invitee_uri": "INV2", "calcule_le": "2026-08-10T00:00:00+00:00"}]
+        return []
+    def faux_sb(m, path, body=None, prefer=None):
+        if m == "GET":
+            return []
+        ecrits.append((path.split("?")[0], body))
+    a.sb_all, a.sb, a.contact_par_email = faux_all, faux_sb, lambda e: CONTACT
+    try:
+        a.run_rdv()
+    finally:
+        a.sb_all, a.sb, a.contact_par_email = orig_all, orig_sb, orig_contact
+    tables = [t for t, _ in ecrits]
+    assert tables == ["/rest/v1/identites", "/rest/v1/touches", "/rest/v1/attribution_rdv"]
+    ident, touche, attr = [b[0] for _, b in ecrits]
+    assert ident == {"vid": "v-cal", "email": "jean@gmail.com", "source": "calendly"}
+    assert touche["type"] == "rdv" and touche["vid"] == "v-cal"
+    assert attr["invitee_uri"] == RDV["invitee_uri"] and attr["tunnel"] == "call"
+    assert attr["modele"] == "sio_contact" and attr["slug_crea"] == "recyc_img_macarons"
+    assert attr["vid"] == "v-cal"      # vid Calendly garde meme sans touche
+
+
 def test_attribuer_aucune():
     r = a.attribuer(VENTE, [], contact=None)
     assert r["modele"] == "aucune" and r["canal"] is None and r["canal_dernier"] is None

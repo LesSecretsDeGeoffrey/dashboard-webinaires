@@ -27,7 +27,7 @@ create table if not exists public.touches (
   id uuid primary key default gen_random_uuid(),
   vid text,
   ts timestamptz not null default now(),
-  type text not null check (type in ('pageview','click_go','identite','achat')),
+  type text not null check (type in ('pageview','click_go','identite','achat','rdv')),
   url text,
   path text,
   referrer text,
@@ -49,7 +49,7 @@ create table if not exists public.identites (
   vid text not null,
   email text not null,
   first_seen_at timestamptz default now(),
-  source text check (source in ('optin','checkout','vente')),
+  source text check (source in ('optin','checkout','vente','calendly')),
   primary key (vid, email)
 );
 create index if not exists idx_identites_email on public.identites(email);
@@ -95,6 +95,59 @@ create table if not exists public.contacts_sio_utm (
   primary key (contact_id, empreinte)
 );
 create index if not exists idx_contacts_sio_utm_email on public.contacts_sio_utm(email, vu_le);
+
+-- ============================================================
+-- RDV CALENDLY (21/08/2026) : Calendly -> webhook invitee.created / invitee.canceled
+-- -> scenario Make "[Calendly] RDV -> Supabase" -> cette table (upsert par invitee_uri).
+-- Le vid arrive par tracking.salesforce_uuid (pose par le snippet v1.1 sur tout lien
+-- Calendly), les utm_* par tracking.*, les reponses du questionnaire en r1..r5.
+-- ============================================================
+create table if not exists public.rdv (
+  invitee_uri text primary key,          -- payload.uri (cle Calendly de l'invite)
+  email text,
+  prenom text, nom text,
+  event_nom text,                        -- payload.scheduled_event.name
+  event_uri text,
+  debut timestamptz, fin timestamptz,    -- creneau
+  statut text not null default 'pris' check (statut in ('pris','annule')),
+  cree_le timestamptz,                   -- payload.created_at (la reservation)
+  maj_le timestamptz,                    -- created_at du dernier webhook recu
+  vid text,                              -- tracking.salesforce_uuid
+  utm_source text, utm_medium text, utm_campaign text, utm_term text, utm_content text,
+  r1 text, r2 text, r3 text, r4 text, r5 text,   -- reponses, par position
+  motif_annulation text,
+  raw jsonb,
+  synced_at timestamptz default now()
+);
+create index if not exists idx_rdv_email on public.rdv(email);
+create index if not exists idx_rdv_cree_le on public.rdv(cree_le desc);
+
+-- Une ligne par RDV : meme modele que attribution (ventes), ecrite par le robot.
+create table if not exists public.attribution_rdv (
+  invitee_uri text primary key references public.rdv(invitee_uri) on delete cascade,
+  email text,
+  vid text,
+  modele text check (modele in ('last_paid','first','sio_contact','aucune')),
+  premier_contact jsonb,
+  dernier_contact jsonb,
+  dernier_contact_payant jsonb,
+  canal text,
+  canal_dernier text,
+  tunnel text,
+  ad_id text, slug_crea text, adset_name text, campaign_name text,
+  nb_touches int default 0,
+  delai_j numeric,
+  calcule_le timestamptz default now()
+);
+
+-- Le type de touche 'rdv' et la source d'identite 'calendly' (contraintes inline
+-- nommees par Postgres <table>_<colonne>_check, re-creees a l'identique + la valeur)
+alter table public.touches drop constraint if exists touches_type_check;
+alter table public.touches add constraint touches_type_check
+  check (type in ('pageview','click_go','identite','achat','rdv'));
+alter table public.identites drop constraint if exists identites_source_check;
+alter table public.identites add constraint identites_source_check
+  check (source in ('optin','checkout','vente','calendly'));
 
 -- Depense Meta PAR PUB et PAR JOUR (le robot rejoue J-3 a J a chaque passage)
 create table if not exists public.depenses_ads (
@@ -168,13 +221,21 @@ do $$
 declare t text;
 begin
   foreach t in array array['sync_state','visiteurs','touches','identites',
-                           'contacts_sio','contacts_sio_utm','depenses_ads','attribution','capi_envois']
+                           'contacts_sio','contacts_sio_utm','depenses_ads','attribution','capi_envois',
+                           'rdv','attribution_rdv']
   loop
     execute format('alter table public.%I enable row level security', t);
     execute format('drop policy if exists "%s_read" on public.%I', t, t);
     execute format('create policy "%s_read" on public.%I for select using (true)', t, t);
   end loop;
 end $$;
+
+-- rdv : le scenario Make upserte avec la cle publishable (meme posture que ventes_all,
+-- auditee : durcissement = chantier securite). Lecture deja couverte par la boucle.
+drop policy if exists "rdv_write" on public.rdv;
+create policy "rdv_write" on public.rdv for insert with check (true);
+drop policy if exists "rdv_update" on public.rdv;
+create policy "rdv_update" on public.rdv for update using (true) with check (true);
 
 alter table public.liens enable row level security;
 drop policy if exists "liens_read"   on public.liens;
