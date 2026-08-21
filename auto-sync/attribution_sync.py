@@ -2,10 +2,11 @@
 """
 ATTRIBUTION DES VENTES (phase 1) : quelle pub / quel canal ramene chaque vente.
 
-Trois passes, toutes idempotentes (upsert par cle, relançable a volonte) :
+Quatre passes, toutes idempotentes (upsert par cle, relançable a volonte) :
   1. Meta insights level=ad, J-3 -> J    -> depenses_ads   (spend par pub/jour)
   2. Contacts Systeme.io (3 passes)      -> contacts_sio   (utm de l'inscription)
   3. Ventes sans attribution             -> attribution    (+ touche 'achat')
+  4. Purchase CAPI (ventes attribuees, <= 7 j) -> capi_envois
 
 En phase 1, la table touches est vide : le modele retombe toujours sur
 'sio_contact' (champs utm du contact) — c'est voulu, et ca couvre tout
@@ -21,6 +22,13 @@ Usage :
   python3 attribution_sync.py --dry-run      # calcule et affiche, n'ecrit rien
   python3 attribution_sync.py --recalc       # recalcule TOUTES les attributions
   python3 attribution_sync.py --skip-meta    # sans l'etape Meta (pas de META_TOKEN)
+  python3 attribution_sync.py --capi         # passe 4 : envoi REEL des Purchase a Meta
+  python3 attribution_sync.py --capi-test CODE   # passe 4 en mode test (test_event_code CODE,
+                                             #   visible dans Evenements de test, journal test=true)
+  python3 attribution_sync.py --capi-retry   # avec --capi : rejoue les ventes en statut 'erreur'
+  python3 attribution_sync.py --capi-forcer  # avec --capi-test seulement : sans vente dans la
+                                             #   fenetre 7 j, rejoue la derniere datee de maintenant
+  python3 attribution_sync.py --seulement-capi   # saute les passes 1-3 (run de test rapide)
 
 Env : SYSTEME_API_KEY, META_TOKEN, SUPABASE_SERVICE_KEY (jamais la publishable :
 le robot ecrit dans des tables protegees par RLS).
@@ -247,7 +255,7 @@ def achat_touche_id(vente_id):
 
 PIXEL = os.environ.get("META_PIXEL", "2085581652276222")
 CAPI_FENETRE_J = 7        # Meta refuse un event_time de plus de 7 jours
-CAPI_DOUBLON_J = 120      # fenetre du garde-fou "meme email + meme produit deja envoye"
+CAPI_DOUBLON_J = 120      # fenetre du garde-fou "meme email + meme produit deja envoye" : plan le plus long 4x mensuel = ~90 j + marge ; a revoir si un plan 6x/12x apparait
 # event_source_url quand ventes.raw.page n'est pas une URL (tous les achats d'avant le webhook)
 TUNNELS_URL = {
     "live": "https://www.lessecretsdegeoffrey.fr/paiementfondationspro",
@@ -594,6 +602,108 @@ def run_attribution(recalc=False, dry=False):
             continue
 
 
+# ---------------------------------------------------------------- Purchase CAPI : I/O (phase 3)
+
+def envoyer_purchase(evt, test_code=None, post=None):
+    """UN evenement par requete : le journal est exact par vente. Rend (statut, reponse)."""
+    post = post or _http_json
+    corps = {"data": [evt], "access_token": META_TOKEN}
+    if test_code:
+        corps["test_event_code"] = test_code
+    try:
+        r = post("https://graph.facebook.com/v25.0/%s/events" % PIXEL,
+                 data=json.dumps(corps).encode("utf-8"),
+                 headers={"Content-Type": "application/json", "User-Agent": UA}, method="POST") or {}
+        return ("ok" if r.get("events_received") == 1 else "erreur"), r
+    except Exception as e:
+        return "erreur", {"erreur": str(e)[:600]}
+
+
+def options_capi(argv):
+    """--capi (envoi reel) | --capi-test CODE (outil Evenements de test) ;
+    --capi-retry rejoue les erreurs reelles ; --capi-forcer (test seulement) date
+    la derniere vente de maintenant s'il n'y a rien dans la fenetre ;
+    --seulement-capi saute depenses/contacts/attribution."""
+    o = {"mode": None, "test_code": None, "retry": "--capi-retry" in argv,
+         "forcer": "--capi-forcer" in argv, "seulement": "--seulement-capi" in argv}
+    if "--capi-test" in argv:
+        i = argv.index("--capi-test")
+        code = argv[i + 1].strip() if i + 1 < len(argv) else ""
+        if not code or code.startswith("--"):
+            # un code vide laisserait envoyer_purchase omettre test_event_code :
+            # envoi REEL deguise en test. Refus net.
+            sys.exit("--capi-test attend un code TESTxxxxx (Gestionnaire d'evenements > Evenements de test)")
+        o["mode"], o["test_code"] = "test", code
+    elif "--capi" in argv:
+        o["mode"] = "go"
+    if o["forcer"] and o["mode"] != "test":
+        sys.exit("--capi-forcer n'existe qu'avec --capi-test (jamais d'envoi reel force)")
+    return o
+
+
+def run_capi(o, dry=False):
+    """Passe 4 : ventes avec attribution, sans envoi reel, <= 7 j -> Purchase CAPI.
+    Rend le nombre d'erreurs d'envoi reel (le job doit passer rouge)."""
+    maintenant = time.time()
+    depuis = (datetime.datetime.now(datetime.timezone.utc)
+              - datetime.timedelta(days=CAPI_DOUBLON_J)).isoformat()
+    ventes = sb_all("/rest/v1/ventes?select=id,email,montant,produit,purchased_at,raw"
+                    "&purchased_at=gte.%s&order=purchased_at" % urllib.parse.quote(depuis)) or []
+    if not ventes:
+        print("CAPI : aucune vente sur %d j" % CAPI_DOUBLON_J)
+        return 0
+    # attribution et journal lus en entier (quelques centaines de lignes, pagines par
+    # sb_all) : pas de filtre in.(ids) qui ferait grossir l'URL avec les ventes
+    attrs = {r["vente_id"]: r for r in
+             sb_all("/rest/v1/attribution?select=vente_id,vid,modele,premier_contact,tunnel"
+                    "&order=vente_id") or []}
+    envois = sb_all("/rest/v1/capi_envois?select=vente_id,statut,test&order=vente_id") or []
+    avec_attr = [v for v in ventes if v["id"] in attrs]   # l'attribution d'abord (spec §7.4)
+    a_envoyer, doublons = ventes_a_envoyer(avec_attr, envois, maintenant, retry=o["retry"])
+    force = False
+    # --capi-forcer (test seulement) : la derniere vente AVEC email et SANS ligne reelle
+    # au journal. Jamais une vente deja envoyee pour de vrai : l'upsert par vente_id
+    # remplacerait sa ligne test=false par test=true, et le cron suivant la renverrait
+    # pour de vrai (doublon Meta hors fenetre de deduplication 48 h).
+    deja_reel = {e["vente_id"] for e in envois if not e.get("test")}
+    forcables = [v for v in avec_attr
+                 if (v.get("email") or "").strip() and v["id"] not in deja_reel]
+    if o["forcer"] and not a_envoyer and forcables:
+        # mode test sans vente recente : on rejoue la derniere, datee de maintenant
+        v = dict(forcables[-1])
+        v["purchased_at"] = datetime.datetime.fromtimestamp(maintenant, datetime.timezone.utc).isoformat()
+        a_envoyer, force = [v], True
+    print("CAPI %s : %d a envoyer, %d doublon(s), %d vente(s) sans attribution%s" % (
+        o["mode"], len(a_envoyer), len(doublons), len(ventes) - len(avec_attr),
+        " [FORCE : derniere vente datee de maintenant]" if force else ""))
+    now_iso = datetime.datetime.now(datetime.timezone.utc).isoformat()
+    est_test = o["mode"] == "test"
+    erreurs = 0
+    for v in a_envoyer:
+        email = v["email"].strip().lower()
+        evt = evenement_purchase(v, attrs[v["id"]], touches_de(email), maintenant)
+        u = evt["user_data"]
+        print("  %s %s %s€ : %s | fbc=%s ip=%s vid=%s" % (
+            str(v["purchased_at"])[:16], email, v.get("montant"), evt["event_id"],
+            "oui" if "fbc" in u else "non", "oui" if "client_ip_address" in u else "non",
+            attrs[v["id"]].get("vid") or "-"))
+        if dry:
+            continue
+        statut, rep = envoyer_purchase(evt, o["test_code"])
+        if statut != "ok":
+            print("    ERREUR :", json.dumps(rep)[:300])
+            erreurs += 0 if est_test else 1
+        sb_upsert("capi_envois", [{"vente_id": v["id"], "event_id": evt["event_id"],
+                                   "sent_at": now_iso, "statut": statut, "reponse": rep,
+                                   "test": est_test}], "vente_id")
+    if doublons and not dry and not est_test:
+        sb_upsert("capi_envois", [{"vente_id": v["id"], "event_id": eid_purchase(v["email"], v["id"]),
+                                   "sent_at": now_iso, "statut": "doublon", "test": False,
+                                   "reponse": {"motif": "meme email + meme produit deja envoye"}}
+                                  for v in doublons], "vente_id")
+    return erreurs
+
+
 if __name__ == "__main__":
     dry = "--dry-run" in sys.argv
     if not SERVICE_KEY:
@@ -603,21 +713,34 @@ if __name__ == "__main__":
     backfill = None
     if "--backfill" in sys.argv:
         backfill = sys.argv[sys.argv.index("--backfill") + 1]
+    capi = options_capi(sys.argv)
+    if capi["mode"] and not META_TOKEN:
+        sys.exit("META_TOKEN manquant (Purchase CAPI)")
     echecs = []
-    if META_TOKEN and "--skip-meta" not in sys.argv:
+    if not capi["seulement"]:
+        if META_TOKEN and "--skip-meta" not in sys.argv:
+            try:
+                run_depenses(dry=dry, backfill=backfill)
+            except Exception as e:
+                print("Meta skip (%s)" % str(e)[:200])
+                echecs.append("depenses")
+        else:
+            print("Meta : saute (META_TOKEN absent ou --skip-meta)")
         try:
-            run_depenses(dry=dry, backfill=backfill)
+            run_contacts(dry=dry)
         except Exception as e:
-            print("Meta skip (%s)" % str(e)[:200])
-            echecs.append("depenses")
+            print("SIO contacts skip (%s)" % str(e)[:200])
+            echecs.append("contacts")
+        run_attribution(recalc="--recalc" in sys.argv, dry=dry)
+    if capi["mode"]:
+        try:
+            if run_capi(capi, dry=dry):
+                echecs.append("capi (envoi refuse par Meta, voir capi_envois.reponse)")
+        except Exception as e:
+            print("CAPI skip (%s)" % str(e)[:200])
+            echecs.append("capi")
     else:
-        print("Meta : saute (META_TOKEN absent ou --skip-meta)")
-    try:
-        run_contacts(dry=dry)
-    except Exception as e:
-        print("SIO contacts skip (%s)" % str(e)[:200])
-        echecs.append("contacts")
-    run_attribution(recalc="--recalc" in sys.argv, dry=dry)
+        print("CAPI : saute (ni --capi ni --capi-test)")
     print("DONE" + (" (dry-run, rien ecrit)" if dry else ""))
     if echecs:
         # le job GitHub Actions doit passer ROUGE : une etape sautee en continu

@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Tests des fonctions PURES d'attribution_sync.py. Aucun reseau, aucun secret."""
 import datetime
+import json
 import uuid
 import attribution_sync as a
 
@@ -439,9 +440,82 @@ def test_ventes_a_envoyer_doublon_meme_email_meme_produit():
               _v(4, email="d@b.fr", jours=2), _v(5, email="d@b.fr", jours=1)]
     envois = [{"vente_id": "v1", "statut": "ok", "test": False}]
     env, dbl = a.ventes_a_envoyer(ventes, envois, T0)
-    assert [v["id"] for v in env] == ["v4", "v3"] or [v["id"] for v in env] == ["v3", "v4"]
+    assert [v["id"] for v in env] == ["v4", "v3"]
     assert sorted(v["id"] for v in dbl) == ["v2", "v5"]
+
+def test_ventes_a_envoyer_retry_rend_doublon_si_la_cle_est_deja_partie():
+    """v1 en erreur reelle, v2 (meme email, meme produit) envoyee ok ensuite :
+    avec --capi-retry, v1 est readmise puis classee doublon, jamais envoyee."""
+    ventes = [_v(1, jours=2), _v(2, jours=1)]
+    envois = [{"vente_id": "v1", "statut": "erreur", "test": False},
+              {"vente_id": "v2", "statut": "ok", "test": False}]
+    env, dbl = a.ventes_a_envoyer(ventes, envois, T0, retry=True)
+    assert env == [] and [v["id"] for v in dbl] == ["v1"]
 
 def test_ventes_a_envoyer_sans_email_ecartee():
     env, dbl = a.ventes_a_envoyer([_v(1, email="")], [], T0)
     assert env == [] and dbl == []
+
+
+# --- envoyer_purchase / options_capi / run_capi (Task 4) ---
+
+def test_envoyer_purchase_ok_erreur_et_code_test():
+    vus = []
+    def post_ok(url, data=None, headers=None, method=None):
+        vus.append((url, json.loads(data.decode()), method))
+        return {"events_received": 1, "fbtrace_id": "X"}
+    evt = {"event_name": "Purchase", "event_id": "purchase-1"}
+    statut, rep = a.envoyer_purchase(evt, test_code="TEST123", post=post_ok)
+    assert statut == "ok" and rep["events_received"] == 1
+    url, corps, method = vus[0]
+    assert url.endswith("/%s/events" % a.PIXEL) and method == "POST"
+    assert corps["data"] == [evt] and corps["test_event_code"] == "TEST123" and "access_token" in corps
+    # sans code test : pas de cle test_event_code
+    a.envoyer_purchase(evt, post=post_ok)
+    assert "test_event_code" not in vus[1][1]
+    # refus Meta (HTTPError relevee par _http_json en RuntimeError) : statut erreur + texte garde
+    def post_ko(url, **k):
+        raise RuntimeError("HTTP 400 https://graph.facebook.com/... : {\"error\":{\"message\":\"Invalid parameter\"}}")
+    statut, rep = a.envoyer_purchase(evt, post=post_ko)
+    assert statut == "erreur" and "Invalid parameter" in rep["erreur"]
+    # events_received != 1 = erreur aussi (jamais 'ok' par defaut)
+    assert a.envoyer_purchase(evt, post=lambda *a_, **k: {"events_received": 0})[0] == "erreur"
+
+def test_options_capi_cli():
+    o = a.options_capi(["--capi-test", "TEST1", "--capi-forcer", "--seulement-capi"])
+    assert o == {"mode": "test", "test_code": "TEST1", "retry": False, "forcer": True, "seulement": True}
+    assert a.options_capi(["--capi", "--capi-retry"])["mode"] == "go"
+    assert a.options_capi(["--capi", "--capi-retry"])["retry"] is True
+    assert a.options_capi(["--recalc"])["mode"] is None
+    # --capi-forcer sans mode test est refuse (ne jamais forcer un envoi reel) ; --capi-test sans code aussi
+    import pytest
+    with pytest.raises(SystemExit):
+        a.options_capi(["--capi", "--capi-forcer"])
+    with pytest.raises(SystemExit):
+        a.options_capi(["--capi-test"])
+    with pytest.raises(SystemExit):
+        a.options_capi(["--capi-test", "--seulement-capi"])
+    with pytest.raises(SystemExit):
+        a.options_capi(["--capi-test", "   "])      # code vide = envoi reel deguise : refuse
+
+def test_run_capi_forcer_ne_touche_jamais_une_vente_deja_envoyee(monkeypatch):
+    """--capi-forcer choisit la derniere vente SANS ligne reelle au journal : sinon
+    l'upsert ecraserait la ligne test=false et le cron renverrait la vente pour de vrai."""
+    ventes = [_v(1, jours=30), _v(2, email="b@b.fr", jours=20)]     # v2 = la plus recente, deja envoyee
+    attrs = [{"vente_id": "v1", "vid": None, "modele": "sio_contact", "premier_contact": {}, "tunnel": "live"},
+             {"vente_id": "v2", "vid": None, "modele": "sio_contact", "premier_contact": {}, "tunnel": "live"}]
+    envois = [{"vente_id": "v2", "statut": "ok", "test": False}]
+    def sb_all_fake(path):
+        if "/ventes?" in path: return ventes
+        if "/attribution?" in path: return attrs
+        if "/capi_envois?" in path: return envois
+        raise AssertionError(path)
+    ecrits = []
+    monkeypatch.setattr(a, "sb_all", sb_all_fake)
+    monkeypatch.setattr(a, "touches_de", lambda email: [])
+    monkeypatch.setattr(a, "envoyer_purchase", lambda evt, code=None: ("ok", {"events_received": 1}))
+    monkeypatch.setattr(a, "sb_upsert", lambda table, rows, conflict: ecrits.append((table, rows)))
+    o = {"mode": "test", "test_code": "T", "retry": False, "forcer": True, "seulement": True}
+    assert a.run_capi(o) == 0
+    assert [r["vente_id"] for t, rows in ecrits for r in rows] == ["v1"]     # jamais v2
+    assert ecrits[0][1][0]["test"] is True
