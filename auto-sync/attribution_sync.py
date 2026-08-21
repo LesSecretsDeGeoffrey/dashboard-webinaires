@@ -626,6 +626,11 @@ def options_capi(argv):
     --seulement-capi saute depenses/contacts/attribution."""
     o = {"mode": None, "test_code": None, "retry": "--capi-retry" in argv,
          "forcer": "--capi-forcer" in argv, "seulement": "--seulement-capi" in argv}
+    connues = ("--capi", "--capi-test", "--capi-retry", "--capi-forcer", "--seulement-capi")
+    inconnues = [x for x in argv if x.startswith("--capi") and x not in connues]
+    if inconnues:
+        # une faute de frappe (--capi-tset) finirait sinon en no-op vert silencieux
+        sys.exit("option CAPI inconnue : %s" % " ".join(inconnues))
     if "--capi-test" in argv:
         i = argv.index("--capi-test")
         code = argv[i + 1].strip() if i + 1 < len(argv) else ""
@@ -636,6 +641,8 @@ def options_capi(argv):
         o["mode"], o["test_code"] = "test", code
     elif "--capi" in argv:
         o["mode"] = "go"
+    if o["seulement"] and not o["mode"]:
+        sys.exit("--seulement-capi demande --capi ou --capi-test CODE")
     if o["forcer"] and o["mode"] != "test":
         sys.exit("--capi-forcer n'existe qu'avec --capi-test (jamais d'envoi reel force)")
     return o
@@ -643,7 +650,7 @@ def options_capi(argv):
 
 def run_capi(o, dry=False):
     """Passe 4 : ventes avec attribution, sans envoi reel, <= 7 j -> Purchase CAPI.
-    Rend le nombre d'erreurs d'envoi reel (le job doit passer rouge)."""
+    Rend le nombre d'envois refuses par Meta (test ou reel) : le job doit passer rouge."""
     maintenant = time.time()
     depuis = (datetime.datetime.now(datetime.timezone.utc)
               - datetime.timedelta(days=CAPI_DOUBLON_J)).isoformat()
@@ -692,10 +699,17 @@ def run_capi(o, dry=False):
         statut, rep = envoyer_purchase(evt, o["test_code"])
         if statut != "ok":
             print("    ERREUR :", json.dumps(rep)[:300])
-            erreurs += 0 if est_test else 1
-        sb_upsert("capi_envois", [{"vente_id": v["id"], "event_id": evt["event_id"],
-                                   "sent_at": now_iso, "statut": statut, "reponse": rep,
-                                   "test": est_test}], "vente_id")
+            erreurs += 1
+        try:
+            sb_upsert("capi_envois", [{"vente_id": v["id"], "event_id": evt["event_id"],
+                                       "sent_at": now_iso, "statut": statut, "reponse": rep,
+                                       "test": est_test}], "vente_id")
+        except Exception as e:
+            # l'evenement est PARTI chez Meta mais n'est pas journalise : le cron
+            # suivant le renverrait. Trace identifiable, puis on laisse la passe tomber.
+            print("    JOURNAL KO apres envoi %s : vente %s event_id %s (%s)" % (
+                statut, v["id"], evt["event_id"], str(e)[:150]))
+            raise
     if doublons and not dry and not est_test:
         sb_upsert("capi_envois", [{"vente_id": v["id"], "event_id": eid_purchase(v["email"], v["id"]),
                                    "sent_at": now_iso, "statut": "doublon", "test": False,
@@ -735,7 +749,7 @@ if __name__ == "__main__":
     if capi["mode"]:
         try:
             if run_capi(capi, dry=dry):
-                echecs.append("capi (envoi refuse par Meta, voir capi_envois.reponse)")
+                echecs.append("capi (envoi refuse par Meta, voir capi_envois.reponse ou le log)")
         except Exception as e:
             print("CAPI skip (%s)" % str(e)[:200])
             echecs.append("capi")

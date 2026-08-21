@@ -497,6 +497,10 @@ def test_options_capi_cli():
         a.options_capi(["--capi-test", "--seulement-capi"])
     with pytest.raises(SystemExit):
         a.options_capi(["--capi-test", "   "])      # code vide = envoi reel deguise : refuse
+    with pytest.raises(SystemExit):
+        a.options_capi(["--capi-tset", "X"])
+    with pytest.raises(SystemExit):
+        a.options_capi(["--seulement-capi"])
 
 def test_run_capi_forcer_ne_touche_jamais_une_vente_deja_envoyee(monkeypatch):
     """--capi-forcer choisit la derniere vente SANS ligne reelle au journal : sinon
@@ -519,3 +523,79 @@ def test_run_capi_forcer_ne_touche_jamais_une_vente_deja_envoyee(monkeypatch):
     assert a.run_capi(o) == 0
     assert [r["vente_id"] for t, rows in ecrits for r in rows] == ["v1"]     # jamais v2
     assert ecrits[0][1][0]["test"] is True
+
+
+# --- run_capi : contrat reel (refus compte, doublon journalise, dry-run inerte) ---
+
+def _v_now(i, email="a@b.fr", produit="MFP 497€", heures=1):
+    ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=heures)
+    return {"id": "v%d" % i, "email": email, "produit": produit, "montant": 497,
+            "purchased_at": ts.isoformat()}
+
+def _attr(vid):
+    return {"vente_id": vid, "vid": None, "modele": "sio_contact", "premier_contact": {}, "tunnel": "live"}
+
+def _branche(monkeypatch, ventes, envois, reponses):
+    """reponses : evt -> (statut, rep). Rend la liste des lignes upsertees."""
+    def sb_all_fake(path):
+        if "/ventes?" in path: return ventes
+        if "/attribution?" in path: return [_attr(v["id"]) for v in ventes]
+        if "/capi_envois?" in path: return envois
+        raise AssertionError(path)
+    ecrits = []
+    monkeypatch.setattr(a, "sb_all", sb_all_fake)
+    monkeypatch.setattr(a, "touches_de", lambda email: [])
+    monkeypatch.setattr(a, "envoyer_purchase", lambda evt, code=None: reponses(evt))
+    monkeypatch.setattr(a, "sb_upsert", lambda table, rows, conflict: ecrits.extend(rows))
+    return ecrits
+
+GO = {"mode": "go", "test_code": None, "retry": False, "forcer": False, "seulement": True}
+TEST = {"mode": "test", "test_code": "T", "retry": False, "forcer": False, "seulement": True}
+
+def test_run_capi_refus_meta_compte_et_les_autres_partent(monkeypatch):
+    ventes = [_v_now(1, heures=3), _v_now(2, email="b@b.fr", heures=2)]
+    def rep(evt):
+        return ("erreur", {"erreur": "HTTP 400 Invalid parameter"}) \
+            if evt["event_id"] == a.eid_purchase("a@b.fr", "v1") else ("ok", {"events_received": 1})
+    ecrits = _branche(monkeypatch, ventes, [], rep)
+    assert a.run_capi(dict(GO)) == 1
+    par = {r["vente_id"]: r for r in ecrits}
+    assert par["v1"]["statut"] == "erreur" and par["v2"]["statut"] == "ok"
+    assert all(r["test"] is False for r in ecrits)
+
+def test_run_capi_doublon_journalise_en_reel_pas_en_test(monkeypatch):
+    ventes = [_v_now(1, heures=3), _v_now(2, heures=2)]      # meme email + meme produit = echeance rejouee
+    ok = lambda evt: ("ok", {"events_received": 1})
+    ecrits = _branche(monkeypatch, ventes, [], ok)
+    assert a.run_capi(dict(GO)) == 0
+    par = {r["vente_id"]: r for r in ecrits}
+    assert par["v1"]["statut"] == "ok" and par["v2"]["statut"] == "doublon" and par["v2"]["test"] is False
+    ecrits = _branche(monkeypatch, ventes, [], ok)
+    a.run_capi(dict(TEST))
+    assert [r["vente_id"] for r in ecrits] == ["v1"]     # pas de ligne doublon test=false en mode test
+
+def test_run_capi_dry_run_n_envoie_ni_n_ecrit(monkeypatch):
+    appels = []
+    ecrits = _branche(monkeypatch, [_v_now(1)], [], lambda evt: appels.append(evt) or ("ok", {}))
+    assert a.run_capi(dict(GO), dry=True) == 0
+    assert appels == [] and ecrits == []
+
+def test_run_capi_refus_en_mode_test_compte_aussi(monkeypatch):
+    """Token/payload refuse pendant un --capi-test : le job doit passer ROUGE, pas vert
+    avec une ligne ERREUR enterree dans le log."""
+    ecrits = _branche(monkeypatch, [_v_now(1)], [], lambda evt: ("erreur", {"erreur": "x"}))
+    assert a.run_capi(dict(TEST)) == 1
+    assert ecrits[0]["statut"] == "erreur" and ecrits[0]["test"] is True
+
+def test_run_capi_journal_ko_apres_envoi_trace_et_releve(monkeypatch, capsys):
+    """Envoi parti, upsert capi_envois KO : trace identifiable (vente + event_id) puis
+    l'exception remonte, la passe tombe et le job passe rouge."""
+    import pytest
+    _branche(monkeypatch, [_v_now(1)], [], lambda evt: ("ok", {"events_received": 1}))
+    def upsert_ko(table, rows, conflict):
+        raise RuntimeError("HTTP 503 supabase")
+    monkeypatch.setattr(a, "sb_upsert", upsert_ko)
+    with pytest.raises(RuntimeError):
+        a.run_capi(dict(GO))
+    out = capsys.readouterr().out
+    assert "JOURNAL KO apres envoi ok : vente v1 event_id " + a.eid_purchase("a@b.fr", "v1") in out
