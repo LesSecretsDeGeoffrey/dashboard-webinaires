@@ -6,7 +6,12 @@ name: Attribution ventes
 on:
   schedule:
     - cron: '30 2,8,14,20 * * *'   # toutes les 6 h (UTC), decale des syncs existants
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      recalc:
+        description: "Recalculer TOUTES les attributions depuis touches/contacts_sio (--recalc)"
+        type: boolean
+        default: false
 
 jobs:
   attribution:
@@ -18,4 +23,4 @@ jobs:
           SYSTEME_API_KEY: ${{ secrets.SYSTEME_API_KEY }}
           META_TOKEN: ${{ secrets.META_TOKEN }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python3 auto-sync/attribution_sync.py
+        run: python3 auto-sync/attribution_sync.py ${{ inputs.recalc == true && '--recalc' || '' }}
