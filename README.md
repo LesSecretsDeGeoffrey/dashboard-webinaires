@@ -105,6 +105,48 @@ pas en service, les écrans restent vides sans casser la page (`q()` rend `[]` s
 **rejouer le fichier EN ENTIER dans Supabase > SQL Editor** après toute modification, comme
 en phase 1 (schéma idempotent, pas de migration séparée).
 
+## RDV Calendly (21/08/2026) — qui prend un call, d'où il vient, s'il achète
+
+```
+Calendly ──(webhook invitee.created / invitee.canceled)──▶ Make 7044512 ──▶ Supabase `rdv`
+                                                                              │
+snippet v1.1 : salesforce_uuid=<vid> sur tout lien/popup Calendly ────────────┘
+robot (passe 3b) : touche `rdv` + pont `identites` (vid ↔ email, source calendly) + `attribution_rdv`
+```
+
+- **Make `7044512` « [Calendly] RDV -> Supabase rdv »** (team 2222349) : webhook custom `3587000`
+  (`https://hook.eu1.make.com/pqa1rftko3f7d56viffsf21abel5c2zp`) → filtre `event` commence par
+  `invitee.` → **JSON > Create JSON** (data structure `542690`, c'est lui qui échappe guillemets et
+  retours à la ligne des réponses) → **Webhook response** (renvoie le JSON produit : un `curl` sur le
+  hook montre le mapping) → **HTTP POST** `/rest/v1/rdv?on_conflict=invitee_uri` (upsert, clé
+  publishable, policies `rdv_write`/`rdv_update`), erreur ignorée pour ne jamais désactiver le scénario.
+  Colonnes : identité, créneau, `statut` (`pris`/`annule`), `cree_le` (la réservation), `vid`
+  (`tracking.salesforce_uuid`), `utm_*` (`tracking.*`), `r1..r5` (réponses dans l'ordre des questions),
+  `motif_annulation`, `raw`.
+- **Abonner Calendly au hook** (pas d'UI chez Calendly, API seulement, plan Standard ou plus) :
+  Calendly → Intégrations → API & Webhooks → *Personal access token*, puis
+  ```bash
+  TOKEN=… ; ME=$(curl -s https://api.calendly.com/users/me -H "Authorization: Bearer $TOKEN")
+  ORG=$(echo "$ME" | python3 -c 'import sys,json;print(json.load(sys.stdin)["resource"]["current_organization"])')
+  curl -s -X POST https://api.calendly.com/webhook_subscriptions -H "Authorization: Bearer $TOKEN" \
+    -H "Content-Type: application/json" -d "{\"url\":\"https://hook.eu1.make.com/pqa1rftko3f7d56viffsf21abel5c2zp\",
+    \"events\":[\"invitee.created\",\"invitee.canceled\"],\"organization\":\"$ORG\",\"scope\":\"organization\"}"
+  ```
+  Contrôle : `curl -s "https://api.calendly.com/webhook_subscriptions?organization=$ORG&scope=organization" -H "Authorization: Bearer $TOKEN"`
+  → l'abonnement en `state: active`. Puis une vraie réservation test → ligne dans `rdv` sous 10 s,
+  exécution visible dans l'historique Make.
+- **Robot, passe 3b** (`run_rdv`, après l'attribution des ventes, `--recalc` la rejoue) : pour chaque
+  RDV neuf ou mis à jour par Make (`maj_le` > `calcule_le`) → pont `identites` (le vid du snippet rejoint
+  l'email de la réservation), touche `rdv` (id déterministe, datée de la réservation, visible dans
+  **Parcours**), `attribution_rdv` (même fonction `attribuer` que les ventes, `tunnel = call`).
+- **Écran Calls** (`attribution.html`) : RDV pris / annulés, closing (vente du même email APRÈS la
+  réservation), CA des RDV closés, coût par RDV ads (dépense Meta de la période ÷ RDV attribués aux
+  ads), table par canal, liste avec niveau (`r1`), blocage (`r2`), budget (`r5`).
+- Limites : un RDV pris avec un email inconnu et sans `vid` (lien Calendly hors site, ex. envoyé en DM
+  sans passer par `go.`) n'a pas de parcours → attribution `sio_contact` ou `aucune`, comme une vente.
+  Pour les liens envoyés en DM, créer un lien court `go.lessecretsdegeoffrey.fr/<slug>` vers Calendly :
+  le vid est posé au passage et le canal du lien est connu.
+
 ## Attribution (phase 3) — Purchase CAPI
 
 Le robot `auto-sync/attribution_sync.py` envoie chaque vente **attribuée** à Meta par l'API

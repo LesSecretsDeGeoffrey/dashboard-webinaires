@@ -48,6 +48,8 @@ tr.total td { border-top: 2px solid var(--or-trans); font-weight: 700; color: va
 .ptouche { padding: 8px 10px; border-left: 2px solid var(--or-trans); margin: 0 0 4px; }
 .t-achat { border-color: var(--or); color: var(--or-clair); }
 .t-identite { border-color: var(--vert); }
+.t-rdv { border-color: #7aa7d9; color: #cfe1f7; }
+.annule { opacity: .55; text-decoration: line-through; }
 td.tronque { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
 </style>
 </head>
@@ -69,6 +71,7 @@ td.tronque { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
   <button class="fbtn" data-ecran="parcours">Parcours</button>
   <button class="fbtn" data-ecran="tunnels">Tunnels</button>
   <button class="fbtn" data-ecran="liens">Liens</button>
+  <button class="fbtn" data-ecran="calls">Calls</button>
 </div>
 <div id="ecran-perf" class="ecran on">
 
@@ -114,6 +117,24 @@ td.tronque { max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
   restent dans « autre ». Rappel spec §5 : sur iOS/Safari le vid vit 7 jours, les parcours longs se
   lisent sur Chrome/Android</p>
   <div id="tunnelsZone"></div>
+</div></div>
+
+<div id="ecran-calls" class="ecran"><div class="wrap">
+  <h2>Calls — RDV Calendly</h2>
+  <p class="note">Un RDV = un webhook Calendly (<code>invitee.created</code> / <code>canceled</code>) reçu par
+  Make et écrit dans <code>rdv</code>. Attribution par le robot avec le même modèle que les ventes
+  (<code>attribution_rdv</code>). « Closé » = une vente du même email après la réservation.
+  Le coût par RDV divise la dépense Meta de la période par les RDV attribués aux ads</p>
+  <div class="filtres">
+    <button class="fbtn on" data-cj="30">30 j</button>
+    <button class="fbtn" data-cj="90">90 j</button>
+    <button class="fbtn" data-cj="0">Tout</button>
+  </div>
+  <div class="kpis" id="kpisCalls"></div>
+  <h2>Par canal</h2>
+  <div class="scroll"><table id="tblCallsCanaux"></table></div>
+  <h2>Les RDV</h2>
+  <div class="scroll"><table id="tblCalls"></table></div>
 </div></div>
 
 <div id="ecran-liens" class="ecran"><div class="wrap">
@@ -339,6 +360,7 @@ document.querySelectorAll('#onglets .fbtn').forEach(b => b.onclick = () => {
   document.getElementById('ecran-' + b.dataset.ecran).classList.add('on');
   if (b.dataset.ecran === 'liens') chargerLiens();      // toujours frais
   if (b.dataset.ecran === 'tunnels') chargerTunnels();
+  if (b.dataset.ecran === 'calls') chargerCalls();
 });
 
 // --- ecran Liens ---
@@ -403,8 +425,12 @@ async function parcours() {
     const quand = new Date(t.ts).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' });
     const source = t.slug ? 'go/' + t.slug
       : [t.utm_source, t.utm_medium].filter(Boolean).join(' / ') || (t.referrer || '');
+    const x = t.extra || {};
     const detail = t.type === 'achat'
-      ? ((t.extra || {}).produit || '') + ' · ' + fmt((t.extra || {}).montant || 0) + ' €'
+      ? (x.produit || '') + ' · ' + fmt(x.montant || 0) + ' €'
+      : t.type === 'rdv'
+        ? (x.event || 'RDV') + ' · ' + (x.statut || '') + (x.debut
+           ? ' · créneau ' + new Date(x.debut).toLocaleString('fr-FR', { timeZone: 'Europe/Paris' }) : '')
       : (t.type === 'identite' ? (t.contexte || '') + ' ' + (t.email || '')
                                : (t.path || t.url || ''));
     return '<div class="ptouche t-' + t.type + '"><b>' + quand + '</b> · ' + t.type + ' · ' +
@@ -429,6 +455,65 @@ async function chargerTunnels() {
     });
     return html + '</table></div>';
   }).join('') || '<p class="note">Aucune pageview encore (snippet pas collé ?)</p>';
+}
+
+// --- ecran Calls ---
+let callsJ = 30;
+document.querySelectorAll('#ecran-calls [data-cj]').forEach(b => b.onclick = () => {
+  document.querySelectorAll('#ecran-calls [data-cj]').forEach(x => x.classList.remove('on'));
+  b.classList.add('on'); callsJ = +b.dataset.cj; chargerCalls();
+});
+async function chargerCalls() {
+  const lo = callsJ ? addJ(iso(new Date()), -callsJ) : '2000-01-01';
+  const [rdvs, attrs, ventes, spend] = await Promise.all([
+    q('rdv?select=*&cree_le=gte.' + lo + '&order=cree_le.desc'),
+    q('attribution_rdv?select=invitee_uri,canal,canal_dernier,modele,slug_crea,adset_name'),
+    q('ventes?select=email,montant,purchased_at&purchased_at=gte.' + lo),
+    q('depenses_ads?select=spend&date=gte.' + lo),
+  ]);
+  const parUri = {}; attrs.forEach(a => { parUri[a.invitee_uri] = a; });
+  const ventesParEmail = {};
+  ventes.forEach(v => { const e = (v.email || '').toLowerCase(); (ventesParEmail[e] = ventesParEmail[e] || []).push(v); });
+  const closeDe = r => (ventesParEmail[(r.email || '').toLowerCase()] || [])
+    .find(v => v.purchased_at >= (r.cree_le || '')) || null;
+
+  const pris = rdvs.filter(r => r.statut === 'pris');
+  const annules = rdvs.length - pris.length;
+  const closes = pris.filter(closeDe);
+  const ca = closes.reduce((t, r) => t + Number(closeDe(r).montant || 0), 0);
+  const depense = spend.reduce((t, d) => t + Number(d.spend || 0), 0);
+  const rdvAds = pris.filter(r => (parUri[r.invitee_uri] || {}).canal === 'ads').length;
+  document.getElementById('kpisCalls').innerHTML =
+    kpi(fmt(pris.length), 'RDV pris') + kpi(fmt(annules), 'annulés') +
+    kpi(pris.length ? Math.round(100 * closes.length / pris.length) + ' %' : '—', 'closing (RDV → vente)') +
+    kpi(fmt(ca) + ' €', 'CA des RDV closés') +
+    kpi(rdvAds ? fmt(depense / rdvAds) + ' €' : '—', 'coût par RDV (ads)');
+
+  const canaux = {};
+  pris.forEach(r => {
+    const c = (parUri[r.invitee_uri] || {}).canal || 'inconnu';
+    const k = canaux[c] || (canaux[c] = { n: 0, closes: 0, ca: 0 });
+    k.n++; const v = closeDe(r); if (v) { k.closes++; k.ca += Number(v.montant || 0); }
+  });
+  document.getElementById('tblCallsCanaux').innerHTML =
+    '<tr><th>Canal</th><th>RDV pris</th><th>Closés</th><th>Closing</th><th>CA</th></tr>' +
+    (Object.entries(canaux).sort((a, b) => b[1].n - a[1].n).map(([c, k]) =>
+      '<tr><td>' + esc(c) + '</td><td>' + k.n + '</td><td>' + k.closes + '</td><td>' +
+      Math.round(100 * k.closes / k.n) + ' %</td><td>' + fmt(k.ca) + ' €</td></tr>').join('') ||
+    '<tr><td colspan="5" class="note">Aucun RDV sur la période (webhook Calendly pas encore abonné ?)</td></tr>');
+
+  document.getElementById('tblCalls').innerHTML =
+    '<tr><th>Réservé le</th><th>Créneau</th><th>Qui</th><th>Canal</th><th>Pub</th>' +
+    '<th>Niveau</th><th>Blocage</th><th>Budget ?</th><th>Closé</th></tr>' +
+    rdvs.map(r => {
+      const a = parUri[r.invitee_uri] || {}, v = closeDe(r);
+      const d = t => t ? new Date(t).toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'short', timeStyle: 'short' }) : '';
+      return '<tr class="' + (r.statut === 'annule' ? 'annule' : '') + '"><td>' + d(r.cree_le) + '</td><td>' + d(r.debut) +
+        '</td><td>' + esc([r.prenom, r.nom].filter(Boolean).join(' ')) + '<br><span class="note">' + esc(r.email || '') + '</span></td>' +
+        '<td>' + esc(a.canal || '—') + '</td><td>' + esc([a.slug_crea, a.adset_name].filter(Boolean).join(' · ') || '—') + '</td>' +
+        '<td>' + esc(r.r1 || '') + '</td><td>' + esc((r.r2 || '').slice(0, 80)) + '</td><td>' + esc(r.r5 || '') + '</td>' +
+        '<td>' + (v ? fmt(v.montant) + ' €' : (r.statut === 'annule' ? 'annulé' : '')) + '</td></tr>';
+    }).join('');
 }
 
 if (isAuth()) boot();
