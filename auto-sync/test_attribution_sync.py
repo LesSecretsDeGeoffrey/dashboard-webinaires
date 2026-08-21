@@ -501,6 +501,11 @@ def test_options_capi_cli():
         a.options_capi(["--capi-tset", "X"])
     with pytest.raises(SystemExit):
         a.options_capi(["--seulement-capi"])
+    # --capi-retry n'existe qu'avec --capi (jamais de rejeu en mode test)
+    with pytest.raises(SystemExit):
+        a.options_capi(["--capi-retry"])
+    with pytest.raises(SystemExit):
+        a.options_capi(["--capi-test", "T1", "--capi-retry"])
 
 def test_run_capi_forcer_ne_touche_jamais_une_vente_deja_envoyee(monkeypatch):
     """--capi-forcer choisit la derniere vente SANS ligne reelle au journal : sinon

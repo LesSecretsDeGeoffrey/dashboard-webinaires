@@ -121,7 +121,7 @@ pas touché.
 Options : `--capi` (réel, sur le cron à partir de la Task 8) · `--capi-test TESTxxxxx` (outil
 Évènements de test, `test=true`, + `--capi-forcer` = rejoue la dernière vente jamais envoyée pour
 de vrai, datée de maintenant, s'il n'y en a aucune sur 7 j) · `--capi-retry` (rejoue les erreurs
-réelles) · `--seulement-capi` (saute dépenses/contacts/attribution). Depuis GitHub → Actions →
+réelles, avec `--capi` seulement) · `--seulement-capi` (saute dépenses/contacts/attribution). Depuis GitHub → Actions →
 « Attribution ventes » → Run workflow : champs `capi_test_code`, `capi_go`, `capi_retry`. Le
 workflow a un groupe `concurrency` : un run manuel qui chevauche le cron attend son tour.
 

@@ -621,9 +621,9 @@ def envoyer_purchase(evt, test_code=None, post=None):
 
 def options_capi(argv):
     """--capi (envoi reel) | --capi-test CODE (outil Evenements de test) ;
-    --capi-retry rejoue les erreurs reelles ; --capi-forcer (test seulement) date
-    la derniere vente de maintenant s'il n'y a rien dans la fenetre ;
-    --seulement-capi saute depenses/contacts/attribution."""
+    --capi-retry rejoue les erreurs reelles (avec --capi seulement) ; --capi-forcer
+    (test seulement) date la derniere vente de maintenant s'il n'y a rien dans la
+    fenetre ; --seulement-capi saute depenses/contacts/attribution."""
     o = {"mode": None, "test_code": None, "retry": "--capi-retry" in argv,
          "forcer": "--capi-forcer" in argv, "seulement": "--seulement-capi" in argv}
     connues = ("--capi", "--capi-test", "--capi-retry", "--capi-forcer", "--seulement-capi")
@@ -645,6 +645,10 @@ def options_capi(argv):
         sys.exit("--seulement-capi demande --capi ou --capi-test CODE")
     if o["forcer"] and o["mode"] != "test":
         sys.exit("--capi-forcer n'existe qu'avec --capi-test (jamais d'envoi reel force)")
+    if o["retry"] and o["mode"] != "go":
+        # --capi-retry reecrit des lignes reelles 'erreur' : seul un envoi reel a le droit
+        # (en mode test l'upsert remplacerait la ligne test=false par test=true ; seul, c'est un no-op)
+        sys.exit("--capi-retry n'existe qu'avec --capi (rejoue les erreurs REELLES)")
     return o
 
 
