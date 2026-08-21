@@ -304,3 +304,26 @@ def test_tunnel_fragments_presents_dans_le_sql():
         assert vue in sql, f"vue {vue} absente du schema"
     for fn in ("upsert_visiteur", "clic_lien"):
         assert fn in sql, f"fonction {fn} absente du schema"
+
+
+# --- Phase 3 : Purchase CAPI ---
+
+from pathlib import Path
+
+def test_empreinte_vendorisee_identique_a_la_source():
+    """auto-sync/empreinte.py est une COPIE de ads-atelier-macarons-2aout/empreinte.py
+    (le robot tourne dans ce depot seul en CI). Toute modif se fait a la source
+    puis se recopie : ce test le garantit en local, saute en CI (source absente)."""
+    import pytest
+    src = Path(a.HERE).parent.parent / "ads-atelier-macarons-2aout" / "empreinte.py"
+    if not src.exists():
+        pytest.skip("source absente (CI)")
+    assert (Path(a.HERE) / "empreinte.py").read_bytes() == src.read_bytes()
+
+def test_eid_purchase_deterministe_et_normalise():
+    e1 = a.eid_purchase("Jean.Dupont@Gmail.com ", "dec25bf4-0090-4bda-bb97-1c5d7e58663d")
+    e2 = a.eid_purchase("jean.dupont@gmail.com", "dec25bf4-0090-4bda-bb97-1c5d7e58663d")
+    assert e1 == e2
+    assert e1.startswith("purchase-") and len(e1) == len("purchase-") + 16
+    # une autre vente du meme email = un autre identifiant (pas de fusion cote Meta)
+    assert a.eid_purchase("jean.dupont@gmail.com", "autre-id") != e1

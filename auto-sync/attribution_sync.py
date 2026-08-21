@@ -35,6 +35,11 @@ import urllib.parse
 import urllib.request
 import uuid
 from pathlib import Path
+import hashlib
+import time
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from empreinte import empreinte  # noqa: E402  (copie de ads-atelier-macarons-2aout/empreinte.py, test de parite)
 
 SYSTEME_API_KEY = os.environ.get("SYSTEME_API_KEY", "").strip()
 META_TOKEN = os.environ.get("META_TOKEN", "").strip()
@@ -236,6 +241,34 @@ def attribuer(vente, touches, contact):
 
 def achat_touche_id(vente_id):
     return str(uuid.uuid5(NS_ACHAT, str(vente_id)))
+
+
+# ---------------------------------------------------------------- Purchase CAPI (phase 3)
+
+PIXEL = os.environ.get("META_PIXEL", "2085581652276222")
+CAPI_FENETRE_J = 7        # Meta refuse un event_time de plus de 7 jours
+CAPI_DOUBLON_J = 120      # fenetre du garde-fou "meme email + meme produit deja envoye"
+# event_source_url quand ventes.raw.page n'est pas une URL (tous les achats d'avant le webhook)
+TUNNELS_URL = {
+    "live": "https://www.lessecretsdegeoffrey.fr/paiementfondationspro",
+    "ebook": "https://www.lessecretsdegeoffrey.fr/paiementbook",
+    "call": "https://www.lessecretsdegeoffrey.fr/paiementmethode997",
+}
+URL_DEFAUT = "https://www.lessecretsdegeoffrey.fr/"
+
+
+def sha(v):
+    """Meta veut les donnees personnelles hachees, minuscules, sans espaces
+    (meme normalisation que capi_lead.py et que l'optin v9)."""
+    return hashlib.sha256(str(v).strip().lower().encode("utf-8")).hexdigest()
+
+
+def eid_purchase(email, vente_id):
+    """event_id du Purchase : 'purchase-' + empreinte(email|vente_id) (spec §7.4).
+    Deterministe -> relancable ; le pixel n'envoie plus de Purchase (spec §9),
+    il n'y a donc aucun doublon navigateur a fusionner, seulement la
+    deduplication Meta 48 h si le robot rejoue."""
+    return "purchase-" + empreinte(email.strip().lower() + "|" + str(vente_id))
 
 
 # ---------------------------------------------------------------- I/O
