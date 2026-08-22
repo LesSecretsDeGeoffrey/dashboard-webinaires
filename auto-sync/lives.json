@@ -25,5 +25,12 @@
     "plateforme": "welya",
     "welya_webinar_id": 506,
     "welya_session": "WB506-202608091600-eabm"
+  },
+  "2026-09-06": {
+    "tag": "2142722",
+    "campagne": "Atelier Patisserie 06/09",
+    "debut": "2026-08-28",
+    "titre": "Masterclass Patisserie (06/09)",
+    "plateforme": "welya"
   }
 }
