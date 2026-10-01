@@ -31,6 +31,28 @@
     "campagne": "Atelier Patisserie 06/09",
     "debut": "2026-08-28",
     "titre": "Masterclass Patisserie (06/09)",
-    "plateforme": "welya"
+    "plateforme": "welya",
+    "welya_webinar_id": 771,
+    "welya_session": "WB771-202609061600-o2yz"
+  },
+  "2026-09-13": {
+    "tag": "2167244",
+    "campagne": "Masterclass",
+    "id": "120253412596330606",
+    "debut": "2026-09-08",
+    "titre": "Masterclass Patisserie (13/09)",
+    "plateforme": "welya",
+    "welya_webinar_id": 771,
+    "welya_session": "session 2249"
+  },
+  "2026-10-04": {
+    "tag": "2201893",
+    "campagne": "Masterclass 04/10",
+    "id": "120253747624510606",
+    "debut": "2026-09-29",
+    "titre": "Masterclass Patisserie (04/10)",
+    "plateforme": "welya",
+    "welya_webinar_id": 771,
+    "welya_session": "WB771-202610041600-4i6g"
   }
 }
