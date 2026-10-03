@@ -108,33 +108,42 @@ en phase 1 (schéma idempotent, pas de migration séparée).
 ## RDV Calendly (21/08/2026) — qui prend un call, d'où il vient, s'il achète
 
 ```
-Calendly ──(webhook invitee.created / invitee.canceled)──▶ Make 7044512 ──▶ Supabase `rdv`
-                                                                              │
-snippet v1.1 : salesforce_uuid=<vid> sur tout lien/popup Calendly ────────────┘
+Calendly API ──(Worker Cloudflare `calendly-poll`, cron 1 min, format webhook rejoué)──▶ Make 7044512 ──┬──▶ Welya `UserLead` (notif candidature dans le live)
+                                                                              └──▶ Supabase `rdv`
+snippet v1.1 : salesforce_uuid=<vid> sur tout lien/popup Calendly ─────────────────▶ (colonne `vid`)
 robot (passe 3b) : touche `rdv` + pont `identites` (vid ↔ email, source calendly) + `attribution_rdv`
 ```
 
-- **Make `7044512` « [Calendly] RDV -> Supabase rdv »** (team 2222349) : webhook custom `3587000`
+- **Make `7044512` « [Calendly] RDV -> Welya notif + Supabase rdv »** (team 2222349) : webhook custom `3587000`
   (`https://hook.eu1.make.com/pqa1rftko3f7d56viffsf21abel5c2zp`) → filtre `event` commence par
   `invitee.` → **JSON > Create JSON** (data structure `542690`, c'est lui qui échappe guillemets et
   retours à la ligne des réponses) → **Webhook response** (renvoie le JSON produit : un `curl` sur le
-  hook montre le mapping) → **HTTP POST** `/rest/v1/rdv?on_conflict=invitee_uri` (upsert, clé
-  publishable, policies `rdv_write`/`rdv_update`), erreur ignorée pour ne jamais désactiver le scénario.
+  hook montre le mapping) → **routeur** (03/09/2026, sauvegarde du blueprint :
+  `../webhook-ventes-systeme/make-7044512-calendly-welya.blueprint.json`) :
+  - route 1 **Welya `UserLead`** (filtre `event = invitee.created`, erreur ignorée) : `webinarId` **771**
+    (Masterclass 06/09) + `offerId` **1153** (offre « Canditature » du webinaire), prénom, nom, email,
+    `productName` = nom de l'événement Calendly, `closerName` = Geoffrey, `appointmentDate`/`Time`/`Day`
+    = créneau en heure de Paris (jour en français). Welya les injecte dans les variables de l'offre
+    ([Prénom] [Jour du rdv] [Heure du rdv] [Nom du closer]…) : message post-conversion au prospect,
+    preuve sociale « Bravo à Prénom qui vient de poser sa candidature » aux autres, statut « Conversion »
+    dans le chat. ⚠️ `webinarId`/`offerId` sont en dur : **à changer à chaque live** (même règle que le
+    module 12 du scénario ventes). Le webinaire doit être **publié** pour apparaître dans la liste du
+    module (brouillon = liste vide, la valeur en dur reste acceptée).
+  - route 2 **HTTP POST** `/rest/v1/rdv?on_conflict=invitee_uri` (upsert, clé publishable, policies
+    `rdv_write`/`rdv_update`), erreur ignorée. Les deux routes sont indépendantes : une annulation
+    n'écrit qu'en base, une panne Welya n'empêche pas la ligne `rdv`.
   Colonnes : identité, créneau, `statut` (`pris`/`annule`), `cree_le` (la réservation), `vid`
   (`tracking.salesforce_uuid`), `utm_*` (`tracking.*`), `r1..r5` (réponses dans l'ordre des questions),
   `motif_annulation`, `raw`.
-- **Abonner Calendly au hook** (pas d'UI chez Calendly, API seulement, plan Standard ou plus) :
-  Calendly → Intégrations → API & Webhooks → *Personal access token*, puis
-  ```bash
-  TOKEN=… ; ME=$(curl -s https://api.calendly.com/users/me -H "Authorization: Bearer $TOKEN")
-  ORG=$(echo "$ME" | python3 -c 'import sys,json;print(json.load(sys.stdin)["resource"]["current_organization"])')
-  curl -s -X POST https://api.calendly.com/webhook_subscriptions -H "Authorization: Bearer $TOKEN" \
-    -H "Content-Type: application/json" -d "{\"url\":\"https://hook.eu1.make.com/pqa1rftko3f7d56viffsf21abel5c2zp\",
-    \"events\":[\"invitee.created\",\"invitee.canceled\"],\"organization\":\"$ORG\",\"scope\":\"organization\"}"
-  ```
-  Contrôle : `curl -s "https://api.calendly.com/webhook_subscriptions?organization=$ORG&scope=organization" -H "Authorization: Bearer $TOKEN"`
-  → l'abonnement en `state: active`. Puis une vraie réservation test → ligne dans `rdv` sous 10 s,
-  exécution visible dans l'historique Make.
+- **Comment les réservations arrivent (03/09/2026)** : Calendly est en **plan gratuit** (pas de webhook,
+  ils exigent Standard) et Make aussi (1 000 ops/mois, sondage mini 15 min, 2 scénarios actifs déjà
+  pris). Le Worker Cloudflare **`../calendly-poll/`** (gratuit, cron chaque minute) lit l'API Calendly
+  avec un jeton d'accès personnel et poste chaque nouveauté sur le hook au format du webhook, avec en
+  plus `source` (`poll` / `poll-bootstrap`) et `notif` (`non` = pas de notif Welya, utilisé pour le
+  chargement des 30 derniers jours). Mise en route, contrôle avant live et maintenance : son README.
+  Le jeton se colle dans `~/.claude/.env.calendly` puis `calendly-poll/brancher_jeton.sh`.
+- **Si un jour le compte passe en Standard** : `python3 dashboard-webinaires-sync/calendly_abonner_hook.py`
+  abonne le vrai webhook (instantané), même hook, même scénario, et le Worker se supprime.
 - **Robot, passe 3b** (`run_rdv`, après l'attribution des ventes, `--recalc` la rejoue) : pour chaque
   RDV neuf ou mis à jour par Make (`maj_le` > `calcule_le`) → pont `identites` (le vid du snippet rejoint
   l'email de la réservation), touche `rdv` (id déterministe, datée de la réservation, visible dans
