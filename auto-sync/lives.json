@@ -54,5 +54,14 @@
     "plateforme": "welya",
     "welya_webinar_id": 771,
     "welya_session": "WB771-202610041600-4i6g"
+  },
+  "2026-10-11": {
+    "tag": "2214189",
+    "campagne": "Masterclass 11/10",
+    "debut": "2026-10-06",
+    "titre": "Masterclass Patisserie (11/10)",
+    "plateforme": "welya",
+    "welya_webinar_id": 771,
+    "welya_session": "WB771-202610111600-rmsi"
   }
 }
