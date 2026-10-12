@@ -172,6 +172,11 @@ for d, cfg in cibles:
         print("  %s : 0 contact sur le tag %s, skip" % (d, cfg["tag"]))
         continue
     patch = ventile(cts)
+    fige = cfg.get("inscrits_figes")
+    if fige:
+        # le tag fond apres le live (contacts supprimes de SIO) : on garde la photo du soir
+        patch = {"inscrits_total": fige["total"], "inscrits_ads": fige["ads"],
+                 "inscrits_organique": fige["organique"]}
 
     rows = sb("GET", "/rest/v1/webinaires?date=eq.%s&select=id" % d) or []
     if rows:
