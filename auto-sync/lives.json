@@ -75,5 +75,14 @@
       "ads": 385,
       "organique": 15
     }
+  },
+  "2026-10-18": {
+    "tag": "2231278",
+    "campagne": "Masterclass 18/10",
+    "debut": "2026-10-15",
+    "titre": "Masterclass Patisserie (18/10)",
+    "plateforme": "welya",
+    "welya_webinar_id": 771,
+    "welya_session": "WB771-202610181600-n834"
   }
 }
