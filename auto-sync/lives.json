@@ -84,6 +84,11 @@
     "plateforme": "welya",
     "welya_webinar_id": 771,
     "welya_session": "WB771-202610181600-n834",
-    "id": "120253981565020606"
+    "id": "120253981565020606",
+    "inscrits_figes": {
+      "total": 211,
+      "ads": 197,
+      "organique": 14
+    }
   }
 }
