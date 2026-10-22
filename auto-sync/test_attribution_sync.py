@@ -75,6 +75,26 @@ def test_tunnel_par_produit_quand_pas_de_path():
     assert a.tunnel_de(None, "objet inconnu") == "autre"
 
 
+def test_tunnel_pastry_academy():
+    """22/10 : les abonnements Pastry Academy (ex-Club) entrent dans ventes par le
+    webhook de /paiementclub. Plans relevés : 'La Pastry Academy 29', '… 260',
+    ancien 'Le Club Privé Des Pâtissiers 29€'."""
+    assert a.tunnel_de("https://www.lessecretsdegeoffrey.fr/paiementclub", None) == "pastry"
+    assert a.tunnel_de(None, "La Pastry Academy 29") == "pastry"
+    assert a.tunnel_de(None, "La Pastry Academy 260") == "pastry"
+    assert a.tunnel_de(None, "Le Club Privé Des Pâtissiers 29€") == "pastry"
+    assert a.tunnel_de(None, "MFP 4x125") == "live"   # la Méthode ne bascule pas
+
+
+def test_source_url_pastry_sans_page():
+    """Rattrapage 22/10 : une vente Pastry Academy sans raw.page part avec l'URL
+    de sa page de paiement, pas la racine du site."""
+    v = dict(VENTE_P3, raw={}, produit="La Pastry Academy 29")
+    e = a.evenement_purchase(v, {"tunnel": "pastry", "premier_contact": {}}, [], T0)
+    assert e["event_source_url"] == "https://www.lessecretsdegeoffrey.fr/paiementclub"
+    assert e["custom_data"]["content_name"] == "La Pastry Academy 29"
+
+
 # --- ligne_depense (Meta insights level=ad -> ligne depenses_ads) ---
 
 def test_ligne_depense():

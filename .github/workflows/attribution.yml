@@ -9,7 +9,7 @@ concurrency:
 
 on:
   schedule:
-    - cron: '30 2,8,14,20 * * *'   # toutes les 6 h (UTC), decale des syncs existants
+    - cron: '30 * * * *'   # toutes les heures (22/10 : le Purchase d'un abonnement Pastry Academy doit partir chez Meta dans l'heure)
   workflow_dispatch:
     inputs:
       recalc:

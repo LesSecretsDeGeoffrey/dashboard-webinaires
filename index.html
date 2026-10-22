@@ -3086,7 +3086,11 @@ function applyVentesAttribution(list) {
   // (clé email|montant : un re-tag du même achat est ignoré, mais la même personne
   // peut acheter le 17 € PUIS la Méthode sans être écrasée)
   const seen = new Set();
+  // Abonnements Pastry Academy (ex-Club, webhook /paiementclub depuis le 22/10) : pas des
+  // ventes de live, exclus (sinon 29 € = « back-end 17 € » et annuel 260 € = vente Méthode)
+  const ABO = /pastry academy|club/i;
   const ventes = [...brut]
+    .filter(v => !ABO.test(v.produit || ''))
     .sort((a, b) => (a.purchased_at || '').localeCompare(b.purchased_at || ''))
     .filter(v => {
       const e = (v.email || '').toLowerCase().trim();

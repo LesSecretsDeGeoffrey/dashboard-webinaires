@@ -360,6 +360,7 @@ language sql immutable as $$
       or lower(p) like '%/paiementmethode997%'                                then 'call'
     when lower(p) like '%/paiementfondationspro%' or lower(p) like '%/live2%' then 'live'
     when lower(p) like '%/paiementbook%' or lower(p) like '%/maitrise%'       then 'ebook'
+    when lower(p) like '%/paiementclub%' or lower(p) like '%/club%'           then 'pastry'
     else 'autre'
   end
 $$;

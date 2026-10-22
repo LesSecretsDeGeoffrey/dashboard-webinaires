@@ -292,7 +292,10 @@ def acheteurs_connus():
     """Emails a NE JAMAIS DM : ventes Methode (table ventes) + tag acheteur Systeme.io."""
     emails = set()
     try:
-        for v in (sb("GET", "/rest/v1/ventes?select=email,montant") or []):
+        for v in (sb("GET", "/rest/v1/ventes?select=email,montant,produit") or []):
+            # un abonnement Pastry Academy (annuel 260 €) n'est pas un achat de la Methode
+            if any(m in (v.get("produit") or "").lower() for m in ("pastry academy", "club")):
+                continue
             if v.get("email") and (v.get("montant") or 0) >= 100:
                 emails.add(str(v["email"]).lower())
     except Exception:

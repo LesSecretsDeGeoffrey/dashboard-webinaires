@@ -81,6 +81,7 @@ TUNNELS_PATH = [
     ("/paiementfondationspro", "live"),
     ("/paiementbook", "ebook"),
     ("/maitrise", "ebook"),
+    ("/paiementclub", "pastry"),   # abonnement Pastry Academy (ex-Club), webhook branché le 22/10
 ]
 TUNNELS_PRODUIT = [
     # inner_name reels des plans call (SIO 21/08) AVANT 'fondations'/'mfp' :
@@ -91,6 +92,7 @@ TUNNELS_PRODUIT = [
     ("fondations", "live"), ("mfp", "live"),
     ("ebook", "ebook"), ("90 jours", "ebook"), ("book", "ebook"),
     ("macaron", "lowticket"),
+    ("pastry academy", "pastry"), ("club", "pastry"),   # 'La Pastry Academy 29/260', ex-'Le Club Privé…
 ]
 
 
@@ -357,6 +359,7 @@ TUNNELS_URL = {
     "live": "https://www.lessecretsdegeoffrey.fr/paiementfondationspro",
     "ebook": "https://www.lessecretsdegeoffrey.fr/paiementbook",
     "call": "https://www.lessecretsdegeoffrey.fr/paiementmethode997",
+    "pastry": "https://www.lessecretsdegeoffrey.fr/paiementclub",
 }
 URL_DEFAUT = "https://www.lessecretsdegeoffrey.fr/"
 
