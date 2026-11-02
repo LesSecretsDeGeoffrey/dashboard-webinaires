@@ -8,6 +8,7 @@
     "  id       : id exact de la campagne Meta. Absent = spend au niveau du compte",
     "  campagne : fragment du nom Meta, seulement si 'id' est absent",
     "  inscrits_figes : {total, ads, organique} = photo du soir du live (dashboard-webinaires-sync/utm-inscrits-<date>.csv, hors adresse test). Le tag SIO fond apres coup (contacts supprimes) : si present, le robot ne recompte plus le tag",
+    "  sans_pub : true = live 100 % organique, le robot ne compte AUCUNE depense Meta (sans id, il prendrait tout le compte)",
     "  titre    : intitule ecrit dans la table webinaires a la creation de la ligne"
   ],
   "2026-08-02": {
@@ -105,5 +106,13 @@
       "ads": 195,
       "organique": 5
     }
+  },
+  "2026-11-15": {
+    "tag": "2265688",
+    "debut": "2026-11-02",
+    "titre": "Masterclass Patisserie (15/11)",
+    "plateforme": "welya",
+    "welya_webinar_id": 771,
+    "sans_pub": true
   }
 }

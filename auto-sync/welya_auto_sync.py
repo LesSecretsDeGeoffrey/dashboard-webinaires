@@ -199,7 +199,11 @@ for d, cfg in cibles:
     # tout ce qui a ete paye pour remplir ce live, sinon le ROAS est flatte.
     if not META_TOKEN:
         continue
-    precedents = [x for x in sorted(LIVES) if x < d]
+    if cfg.get("sans_pub"):
+        # live 100 % organique : la depense du compte sur la fenetre n'a pas servi a le remplir
+        print("     Meta : live sans pub, depense non comptee")
+        continue
+    precedents =[x for x in sorted(LIVES) if x < d]
     if precedents:
         debut = (datetime.date.fromisoformat(precedents[-1]) + datetime.timedelta(days=1)).isoformat()
     else:
