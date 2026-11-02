@@ -98,6 +98,12 @@
     "titre": "Masterclass Patisserie (01/11)",
     "plateforme": "welya",
     "welya_webinar_id": 771,
-    "welya_session": "WB771-202611011700-zpgk"
+    "welya_session": "WB771-202611011700-zpgk",
+    "id": "120254158186820606",
+    "inscrits_figes": {
+      "total": 200,
+      "ads": 195,
+      "organique": 5
+    }
   }
 }
