@@ -114,6 +114,11 @@
     "plateforme": "welya",
     "welya_webinar_id": 771,
     "sans_pub": true,
-    "welya_session": "WB771-202611151700-zns4"
+    "welya_session": "WB771-202611151700-zns4",
+    "inscrits_figes": {
+      "total": 692,
+      "ads": 0,
+      "organique": 692
+    }
   }
 }
